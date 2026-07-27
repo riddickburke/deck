@@ -156,8 +156,13 @@ press `[ dry run ]` to see exactly what would change before anything is written.
   unchanged album costs nothing after the first conversion. Already-lossy files are never
   re-encoded.
 - **Artwork** — `cover.jpg` is written beside each album, resized for the player's screen.
-- **Playlists** — exported as `.m3u8` with device-relative paths, containing only tracks
-  that actually landed on the device.
+- **Playlists** — exported as `.m3u8` to `/Playlists` on the device, with root-relative
+  paths, containing only tracks that actually landed there. **Your playlist order is
+  preserved exactly**, and there are tests asserting it survives a full plan-and-sync
+  against an order that is deliberately neither alphabetical nor by track number. Note
+  that order only applies when you *open the playlist* on the player — browsing the same
+  files through Rockbox's Database or File browser sorts by tag and filename instead.
+  A track can appear only once per playlist.
 - **Cleanup** — off by default. When enabled, it only removes files recorded in the
   manifest, so anything you put on the player by hand is never a deletion candidate.
 

@@ -432,6 +432,140 @@ if !Shell.has("ffmpeg") {
         T.equal(again.path, playable.path, "decode should be cached across calls")
     }
 
+    await T.test("playlist reaches the device in playlist order, not sorted order") {
+        // The order is deliberately scrambled against every other order the code could
+        // accidentally impose: not alphabetical by title, not by track number, not by
+        // filename. If anything sorts along the way, this fails.
+        let root = try Fixture.tempDirectory("playlist-order")
+        let device = try Fixture.tempDirectory("playlist-device")
+        defer { Fixture.remove(root); Fixture.remove(device) }
+
+        let specs = [
+            (file: "c.flac", title: "Cool Song", number: 3),
+            (file: "a.flac", title: "Alpha Song", number: 1),
+            (file: "b.flac", title: "Beta Song", number: 2),
+        ]
+        for spec in specs {
+            try await makeAudio(
+                at: root.appendingPathComponent(spec.file),
+                title: spec.title, artist: "Order Test", album: "Ordering",
+                track: spec.number)
+        }
+
+        let scanner = LibraryScanner(cacheURL: root.appendingPathComponent("index.json"))
+        let scanned = await scanner.scan(roots: [root]) { _ in }
+        T.equal(scanned.count, 3, "all three files indexed")
+
+        // Build the playlist in the scrambled order 3, 1, 2.
+        let byTitle = Dictionary(uniqueKeysWithValues: scanned.map { ($0.title, $0) })
+        let wanted = ["Cool Song", "Alpha Song", "Beta Song"]
+        let ordered = wanted.compactMap { byTitle[$0] }
+        T.equal(ordered.count, 3, "resolved all playlist tracks")
+
+        let playlist = Playlist(
+            name: "Scrambled", trackPaths: ordered.map(\.url.path), syncEnabled: true)
+
+        let target = RockboxDevice(
+            mountPoint: device, volumeName: "TESTDEV",
+            rockboxVersion: "3.15", target: "test",
+            totalCapacity: 1 << 30, availableCapacity: 1 << 30, hasRockbox: true)
+
+        var config = Config.default
+        config.convertFlacToMP3 = false
+        config.writeDeviceArtwork = false
+
+        let engine = SyncEngine()
+        let plan = await engine.plan(
+            tracks: ordered, playlists: [playlist], device: target, config: config)
+        T.equal(plan.transfers.count, 3, "three files to transfer")
+
+        let report = await engine.execute(
+            plan: plan, config: config, removeOrphans: false,
+            artworkFor: { _ in nil }, progress: { _ in })
+        T.equal(report.errors.count, 0, "sync errors: \(report.errors)")
+        T.equal(report.playlistsWritten, 1, "playlist written")
+
+        let m3u = device.appendingPathComponent("Playlists/Scrambled.m3u8")
+        guard let contents = T.notNil(
+            try? String(contentsOf: m3u, encoding: .utf8), "m3u8 file") else { return }
+
+        let entries = contents
+            .split(separator: "\n")
+            .map(String.init)
+            .filter { !$0.hasPrefix("#") && !$0.isEmpty }
+
+        T.equal(entries.count, 3, "three playlist entries")
+        T.equal(
+            entries,
+            ["/Music/Order Test/Ordering/03 Cool Song.flac",
+             "/Music/Order Test/Ordering/01 Alpha Song.flac",
+             "/Music/Order Test/Ordering/02 Beta Song.flac"],
+            "entries must follow playlist order, not track/alphabetical order")
+
+        // Rockbox resolves these against the card root, so they must be absolute
+        // device-relative paths with forward slashes.
+        for entry in entries {
+            T.expect(entry.hasPrefix("/"), "entry should be root-relative: \(entry)")
+            T.expect(!entry.contains("\\"), "entry must not use backslashes: \(entry)")
+            T.expect(
+                FileManager.default.fileExists(
+                    atPath: device.appendingPathComponent(entry).path),
+                "entry should point at a file that exists: \(entry)")
+        }
+    }
+
+    await T.test("a track missing from the device is dropped, not silently reordered") {
+        // If a track cannot be placed, the remaining entries must keep their relative
+        // order rather than shifting into a different sequence.
+        let root = try Fixture.tempDirectory("playlist-gap")
+        let device = try Fixture.tempDirectory("playlist-gap-device")
+        defer { Fixture.remove(root); Fixture.remove(device) }
+
+        for (i, name) in ["one", "two", "three"].enumerated() {
+            try await makeAudio(
+                at: root.appendingPathComponent("\(name).flac"),
+                title: name, artist: "Gap", album: "Gap", track: i + 1)
+        }
+
+        let scanner = LibraryScanner(cacheURL: root.appendingPathComponent("index.json"))
+        let scanned = await scanner.scan(roots: [root]) { _ in }
+        let byTitle = Dictionary(uniqueKeysWithValues: scanned.map { ($0.title, $0) })
+        guard let one = byTitle["one"], let two = byTitle["two"], let three = byTitle["three"]
+        else { return T.fail("could not resolve generated tracks") }
+
+        // The playlist references all three, but only two are actually synced.
+        let playlist = Playlist(
+            name: "Gapped",
+            trackPaths: [three.url.path, two.url.path, one.url.path],
+            syncEnabled: true)
+
+        let target = RockboxDevice(
+            mountPoint: device, volumeName: "TESTDEV", rockboxVersion: nil, target: nil,
+            totalCapacity: 1 << 30, availableCapacity: 1 << 30, hasRockbox: true)
+
+        var config = Config.default
+        config.writeDeviceArtwork = false
+
+        let engine = SyncEngine()
+        let plan = await engine.plan(
+            tracks: [three, one], playlists: [playlist], device: target, config: config)
+        _ = await engine.execute(
+            plan: plan, config: config, removeOrphans: false,
+            artworkFor: { _ in nil }, progress: { _ in })
+
+        let m3u = device.appendingPathComponent("Playlists/Gapped.m3u8")
+        guard let contents = T.notNil(
+            try? String(contentsOf: m3u, encoding: .utf8), "m3u8 file") else { return }
+        let entries = contents.split(separator: "\n").map(String.init)
+            .filter { !$0.hasPrefix("#") && !$0.isEmpty }
+
+        T.equal(entries.count, 2, "only synced tracks should appear")
+        T.equal(
+            entries,
+            ["/Music/Gap/Gap/03 three.flac", "/Music/Gap/Gap/01 one.flac"],
+            "surviving entries must keep their relative playlist order")
+    }
+
     await T.test("FLAC to MP3 leaves the original untouched") {
         // This is the core promise of the conversion option.
         let root = try Fixture.tempDirectory("transcode")
