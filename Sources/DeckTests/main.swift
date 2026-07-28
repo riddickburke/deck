@@ -505,6 +505,60 @@ await T.test("streaming tracks are excluded from a sync plan") {
         "no streaming track may appear in a plan")
 }
 
+T.suite("Synthetic spectrum")
+
+await T.test("is deterministic for a track, and differs between tracks") {
+    // Stable across launches: Foundation's RNG is seeded per process and would give a
+    // track a different animation every time.
+    let a1 = SyntheticSpectrum.forTrack("appleMusic:11276").levels(at: 12.5)
+    let a2 = SyntheticSpectrum.forTrack("appleMusic:11276").levels(at: 12.5)
+    T.equal(a1, a2, "same track and time must produce the same frame")
+
+    let b = SyntheticSpectrum.forTrack("appleMusic:99999").levels(at: 12.5)
+    T.expect(a1 != b, "different tracks should not animate identically")
+}
+
+await T.test("stays in range and is not flat") {
+    let bands = SyntheticSpectrum.forTrack("x").levels(at: 3.2)
+    T.equal(bands.count, Spectrum.bandCount)
+    T.expect(bands.allSatisfy { $0 >= 0 && $0 <= 1 }, "levels must stay within 0...1")
+
+    // The failure that would look worst on screen is every bar identical.
+    let distinct = Set(bands.map { Int($0 * 50) })
+    T.expect(distinct.count > 4, "bars should differ from each other, got \(distinct.count) levels")
+}
+
+await T.test("has a spectral tilt, so it reads as music rather than noise") {
+    // Averaged over time, the low bands should carry more than the high ones.
+    let spectrum = SyntheticSpectrum.forTrack("tilt")
+    var low: Float = 0
+    var high: Float = 0
+    for step in 0..<200 {
+        let bands = spectrum.levels(at: Double(step) * 0.05)
+        low += bands[0..<6].reduce(0, +) / 6
+        high += bands[(bands.count - 6)...].reduce(0, +) / 6
+    }
+    T.expect(low > high, "bass should dominate on average: low=\(low) high=\(high)")
+}
+
+await T.test("intensity fades the whole thing out") {
+    let spectrum = SyntheticSpectrum.forTrack("fade")
+    let full = spectrum.levels(at: 5, intensity: 1).reduce(0, +)
+    let half = spectrum.levels(at: 5, intensity: 0.5).reduce(0, +)
+    let none = spectrum.levels(at: 5, intensity: 0)
+
+    T.expect(half < full, "lower intensity should lower the bars")
+    T.expect(none.allSatisfy { $0 == 0 }, "zero intensity should be silent, so pausing settles")
+}
+
+await T.test("moves over time") {
+    // A frozen animation is the other obvious failure.
+    let spectrum = SyntheticSpectrum.forTrack("motion")
+    T.expect(
+        spectrum.levels(at: 1.0) != spectrum.levels(at: 1.4),
+        "frames a moment apart should differ")
+}
+
 T.suite("Service playlists")
 
 func streamTrack(_ id: String, _ title: String) -> Track {

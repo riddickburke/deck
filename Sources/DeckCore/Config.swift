@@ -23,6 +23,9 @@ public struct Config: Codable, Equatable, Sendable {
     public var spotifyClientID: String?
     /// Visualiser sensitivity, 0...1. Lower needs louder material to fill a bar.
     public var spectrumSensitivity: Double?
+    /// Animate a generated spectrum while a streaming service is playing. Decorative:
+    /// that audio is in another process and cannot be analysed.
+    public var animateStreamingVisualiser: Bool?
 
     public enum RepeatMode: String, Codable, CaseIterable, Sendable {
         case off, all, one
@@ -49,7 +52,8 @@ public struct Config: Codable, Equatable, Sendable {
         deviceArtworkSize: 500,
         onlineLookupEnabled: true,
         spotifyClientID: nil,
-        spectrumSensitivity: 0.35
+        spectrumSensitivity: 0.35,
+        animateStreamingVisualiser: true
     )
 
     // MARK: - Paths
@@ -198,6 +202,10 @@ public struct Config: Codable, Equatable, Sendable {
     /// Defaulted here rather than at the property so an older config still decodes.
     public var resolvedSpectrumSensitivity: Double {
         spectrumSensitivity ?? 0.35
+    }
+
+    public var streamingVisualiserAnimates: Bool {
+        animateStreamingVisualiser ?? true
     }
 
     public var rootURLs: [URL] {

@@ -565,10 +565,22 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Live bars, or a flat set while a service is playing.
+    /// Live bars when Deck is playing, generated ones while a service is.
     var spectrum: [Float] {
-        hasSpectrumSignal ? player.spectrum : Array(repeating: 0, count: Spectrum.bandCount)
+        if hasSpectrumSignal { return player.spectrum }
+        return syntheticBands
     }
+
+    /// True when the bars on screen are generated rather than measured.
+    var spectrumIsSynthetic: Bool {
+        !hasSpectrumSignal && config.streamingVisualiserAnimates
+    }
+
+    @Published private(set) var syntheticBands: [Float] =
+        Array(repeating: 0, count: Spectrum.bandCount)
+    private var synthetic = SyntheticSpectrum(seed: 0)
+    private var syntheticTimer: Timer?
+    private var syntheticIntensity: Float = 0
 
     // Unified transport, so views do not have to know which engine is playing.
     var currentTrack: Track? { isRemoteActive ? remoteTrack : player.currentTrack }
@@ -732,6 +744,8 @@ final class AppState: ObservableObject {
         player.pause()
 
         activeBackend = .spotify
+        synthetic = SyntheticSpectrum.forTrack(track.id)
+        startSyntheticSpectrum()
         remoteTrack = track
         remoteDuration = track.duration
         remotePosition = 0
@@ -767,6 +781,8 @@ final class AppState: ObservableObject {
         player.pause()
 
         activeBackend = .appleMusic
+        synthetic = SyntheticSpectrum.forTrack(track.id)
+        startSyntheticSpectrum()
         remoteTrack = track
         remoteDuration = track.duration
         remotePosition = 0
@@ -784,6 +800,54 @@ final class AppState: ObservableObject {
             }
         }
         startRemotePolling()
+    }
+
+    /// Drives the generated spectrum while a service is playing.
+    ///
+    /// Separate from the one-second state poll: this needs to run at animation rate, and
+    /// the state poll is deliberately slow because each tick is an Apple Event or an
+    /// HTTP request.
+    private func startSyntheticSpectrum() {
+        syntheticTimer?.invalidate()
+        guard config.streamingVisualiserAnimates else {
+            syntheticBands = Array(repeating: 0, count: Spectrum.bandCount)
+            return
+        }
+
+        syntheticTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30, repeats: true) {
+            [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                guard self.isRemoteActive, self.config.streamingVisualiserAnimates else {
+                    self.stopSyntheticSpectrum()
+                    return
+                }
+
+                // Fade rather than freeze, so pausing settles the bars instead of
+                // leaving them stuck mid-animation.
+                let target: Float = self.remoteIsPlaying ? 1 : 0
+                self.syntheticIntensity += (target - self.syntheticIntensity) * 0.12
+
+                guard self.syntheticIntensity > 0.005 else {
+                    self.syntheticBands = Array(repeating: 0, count: Spectrum.bandCount)
+                    return
+                }
+
+                // Driven by playback position, so seeking visibly moves the animation
+                // and a paused track does not keep dancing.
+                let bands = self.synthetic.levels(
+                    at: self.remotePosition, intensity: self.syntheticIntensity)
+                self.syntheticBands = Spectrum.smooth(
+                    previous: self.syntheticBands, toward: bands, release: 0.72)
+            }
+        }
+    }
+
+    private func stopSyntheticSpectrum() {
+        syntheticTimer?.invalidate()
+        syntheticTimer = nil
+        syntheticIntensity = 0
+        syntheticBands = Array(repeating: 0, count: Spectrum.bandCount)
     }
 
     /// Music.app is a separate process, so its state can only be observed by asking.
@@ -818,6 +882,7 @@ final class AppState: ObservableObject {
                 if let id = state.trackID, id != self.remoteTrack?.externalID,
                    let match = self.appleMusicTracks.first(where: { $0.externalID == id }) {
                     self.remoteTrack = match
+                    self.synthetic = SyntheticSpectrum.forTrack(match.id)
                 }
             }
         }
@@ -826,6 +891,7 @@ final class AppState: ObservableObject {
     private func stopRemotePlayback() {
         remoteTimer?.invalidate()
         remoteTimer = nil
+        stopSyntheticSpectrum()
         let remote = appleMusicRemote
         Task { await remote.stop() }
         activeBackend = .local

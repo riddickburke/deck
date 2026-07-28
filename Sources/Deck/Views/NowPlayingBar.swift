@@ -198,7 +198,12 @@ struct SpectrumView: View {
 
     /// Green through yellow to red as bands approach clipping.
     private func color(for level: Float) -> Color {
-        if !app.hasSpectrumSignal { return app.theme.muted.opacity(0.25) }
+        // Generated bars are tinted toward the muted end so they never read as a
+        // measurement of the audio.
+        if !app.hasSpectrumSignal {
+            guard app.spectrumIsSynthetic else { return app.theme.muted.opacity(0.25) }
+            return level > 0.05 ? app.theme.accent.opacity(0.55) : app.theme.muted.opacity(0.3)
+        }
         if level > 0.82 { return app.theme.red }
         if level > 0.6 { return app.theme.yellow }
         if level > 0.05 { return app.theme.accent }

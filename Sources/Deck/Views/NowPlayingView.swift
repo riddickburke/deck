@@ -138,11 +138,19 @@ struct NowPlayingView: View {
             .overlay(Rectangle().strokeBorder(color.opacity(0.45), lineWidth: 1))
     }
 
-    /// The visualiser, or an explanation of why there is nothing to show.
+    /// The visualiser. Real bars when Deck is playing, generated ones while a service
+    /// is — marked as such, since the audio is in another process and cannot be analysed.
     private var spectrumPanel: some View {
         Group {
-            if app.hasSpectrumSignal {
-                BigSpectrum(bands: app.spectrum, height: 96)
+            if app.hasSpectrumSignal || app.spectrumIsSynthetic {
+                VStack(alignment: .leading, spacing: 3) {
+                    BigSpectrum(bands: app.spectrum, height: 96)
+                    if app.spectrumIsSynthetic {
+                        Text("visual only · \(app.playbackHostName ?? "the service") is playing")
+                            .font(DeckFont.mono(8))
+                            .foregroundStyle(app.theme.muted.opacity(0.65))
+                    }
+                }
             } else {
                 VStack(alignment: .leading, spacing: 4) {
                     // A flat meter would read as a bug. Say what is actually happening.

@@ -206,6 +206,15 @@ struct SettingsView: View {
                 .font(DeckFont.mono(9))
                 .foregroundStyle(app.theme.muted.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)
+
+            toggleRow("animate during streaming", isOn: Binding(
+                get: { app.config.streamingVisualiserAnimates },
+                set: { app.config.animateStreamingVisualiser = $0 }))
+
+            Text("draws a generated animation instead of a flat meter while a service is playing. it follows play, pause and seek, and each track animates differently — but it is decorative, not a measurement of the audio. it is labelled on the now playing screen.")
+                .font(DeckFont.mono(9))
+                .foregroundStyle(app.theme.muted.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
