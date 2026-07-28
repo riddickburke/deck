@@ -243,6 +243,24 @@ struct ArtworkView: View {
         guard let album else { image = nil; loaded = true; return }
         image = nil
         loaded = false
+
+        // Apple Music covers live inside Music.app's own store, not beside a file, so
+        // they are fetched over Apple Events and then handed to the normal cache.
+        if album.tracks.first?.source == .appleMusic {
+            if let cached = await ArtworkStore.shared.artworkData(
+                for: album, allowNetwork: false), let decoded = NSImage(data: cached) {
+                await MainActor.run { self.image = decoded; self.loaded = true }
+                return
+            }
+            if let id = album.tracks.first?.externalID,
+               let data = await AppleMusicLibrary.artwork(forTrackID: id) {
+                await ArtworkStore.shared.store(data, for: album.key)
+                let decoded = NSImage(data: data)
+                await MainActor.run { self.image = decoded; self.loaded = true }
+                return
+            }
+        }
+
         let resolved = await ArtworkStore.shared.artwork(for: album, allowNetwork: allowNetwork)
         await MainActor.run {
             self.image = resolved

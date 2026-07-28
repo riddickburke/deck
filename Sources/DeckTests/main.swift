@@ -284,6 +284,81 @@ await T.test("only files we recorded can be orphaned") {
     T.expect(!orphans.contains(theirs), "a file we never wrote must not be deletable")
 }
 
+// MARK: - Streaming sources
+
+T.suite("Streaming sources")
+
+await T.test("an index written before streaming existed still decodes") {
+    // Adding a non-optional `source` would normally break every cached index, because
+    // a synthesised decoder ignores property defaults and fails on the missing key.
+    let legacy = """
+    {
+      "url": "file:///lib/a.flac",
+      "title": "A", "artist": "B", "albumArtist": "B", "album": "C",
+      "duration": 100, "codec": "flac", "fileSize": 10,
+      "modified": 0
+    }
+    """
+    guard let decoded = T.notNil(
+        try? JSONDecoder().decode(Track.self, from: Data(legacy.utf8)),
+        "legacy track decode") else { return }
+
+    T.equal(decoded.source, .local, "missing source should default to local")
+    T.expect(!decoded.isStreaming, "a legacy track is not streaming")
+    T.equal(decoded.title, "A")
+    T.isNil(decoded.externalID, "externalID")
+}
+
+await T.test("a streaming track round-trips through Codable") {
+    let track = Track(
+        source: .appleMusic, externalID: "11276",
+        title: "Ta Me 'Mo Shui", artist: "Altan", albumArtist: "Altan",
+        album: "Blackwater", duration: 210)
+
+    guard let data = try? JSONEncoder().encode(track),
+          let back = T.notNil(try? JSONDecoder().decode(Track.self, from: data), "round trip")
+    else { return }
+
+    T.equal(back.source, .appleMusic)
+    T.equal(back.externalID, "11276")
+    T.expect(back.isStreaming, "apple music tracks stream")
+    T.equal(back.id, "appleMusic:11276", "streaming identity is service + external id")
+}
+
+await T.test("local and streaming tracks do not collide on identity") {
+    let local = makeTrack(title: "Same")
+    let stream = Track(
+        source: .appleMusic, externalID: "1", title: "Same", artist: "Radiohead",
+        albumArtist: "Radiohead", album: "Kid A", duration: 200)
+    T.expect(local.id != stream.id, "ids must differ across sources")
+}
+
+await T.test("streaming tracks are excluded from a sync plan") {
+    // They have no file, so including them would fail mid-transfer and make the
+    // plan's size estimate a lie.
+    let device = try Fixture.tempDirectory("stream-sync")
+    defer { Fixture.remove(device) }
+
+    let target = RockboxDevice(
+        mountPoint: device, volumeName: "TESTDEV", rockboxVersion: nil, target: nil,
+        totalCapacity: 1 << 30, availableCapacity: 1 << 30, hasRockbox: true)
+
+    let local = makeTrack(title: "Local")
+    let streaming = Track(
+        source: .appleMusic, externalID: "99", title: "Streamed", artist: "X",
+        albumArtist: "X", album: "Y", duration: 180)
+
+    let plan = await SyncEngine().plan(
+        tracks: [local, streaming], playlists: [], device: target, config: .default)
+
+    T.equal(plan.actions.count, 1, "only the local track should be planned")
+    T.equal(plan.skippedStreaming, 1, "the streaming track should be counted as skipped")
+    T.equal(plan.actions.first?.track.title, "Local")
+    T.expect(
+        !plan.actions.contains { $0.track.isStreaming },
+        "no streaming track may appear in a plan")
+}
+
 // MARK: - Identifier migration
 
 T.suite("Legacy data migration")

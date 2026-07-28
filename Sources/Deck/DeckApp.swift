@@ -12,6 +12,10 @@ struct DeckApp: App {
         if CommandLine.arguments.contains("--scan") {
             HeadlessScan.run()
         }
+        // `deck --apple-music` verifies the Music.app bridge without opening a window.
+        if CommandLine.arguments.contains("--apple-music") {
+            AppleMusicProbe.run()
+        }
     }
 
     var body: some Scene {

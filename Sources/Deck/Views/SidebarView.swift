@@ -17,6 +17,36 @@ struct SidebarView: View {
                         navRow("queue", count: app.player.queue.count, route: .queue)
                     }
 
+                    group("sources") {
+                        sourceRow(nil, label: "all", count: app.localTracks.count + app.appleMusicTracks.count)
+                        sourceRow(.local, label: "local", count: app.localTracks.count)
+
+                        if app.appleMusicTracks.isEmpty {
+                            HStack {
+                                BracketButton(
+                                    label: app.isImportingAppleMusic ? "reading…" : "+ apple music",
+                                    tint: app.theme.magenta,
+                                    disabled: app.isImportingAppleMusic
+                                ) { app.importAppleMusic() }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 2)
+                        } else {
+                            sourceRow(
+                                .appleMusic, label: "apple music",
+                                count: app.appleMusicTracks.count)
+                        }
+
+                        if let error = app.appleMusicError {
+                            Text(error)
+                                .font(DeckFont.mono(9))
+                                .foregroundStyle(app.theme.red)
+                                .padding(.horizontal, 12)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+
                     group("playlists") {
                         ForEach(app.playlists) { playlist in
                             playlistRow(playlist)
@@ -84,6 +114,41 @@ struct SidebarView: View {
             Spacer().frame(height: 10)
         }
         content()
+    }
+
+    /// Filters the browsable library to one source. Streaming sources are tinted so it
+    /// is obvious at a glance which rows cannot be synced to a device.
+    private func sourceRow(_ source: TrackSource?, label: String, count: Int) -> some View {
+        let active = app.sourceFilter == source
+        let streaming = source?.isStreaming == true
+        return HStack(spacing: 6) {
+            Text(active ? "›" : " ")
+                .font(DeckFont.mono(11))
+                .foregroundStyle(app.theme.accent)
+            Text(label)
+                .font(DeckFont.mono(11))
+                .foregroundStyle(active ? app.theme.fg : app.theme.muted)
+            if streaming {
+                Text("☁")
+                    .font(DeckFont.mono(9))
+                    .foregroundStyle(app.theme.magenta)
+                    .help("streams via Music.app — cannot be synced to a device")
+            }
+            Spacer()
+            Text("\(count)")
+                .font(DeckFont.mono(10))
+                .foregroundStyle(app.theme.muted.opacity(0.7))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .background(active ? app.theme.selection.opacity(0.55) : .clear)
+        .onTapGesture { app.sourceFilter = source }
+        .contextMenu {
+            if source == .appleMusic {
+                Button("refresh from Music.app") { app.importAppleMusic() }
+            }
+        }
     }
 
     private func navRow(_ label: String, count: Int?, route: Route) -> some View {

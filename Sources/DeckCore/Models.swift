@@ -1,9 +1,46 @@
 import Foundation
 
+// MARK: - Source
+
+/// Where a track's audio actually lives.
+///
+/// Streaming tracks have no file on disk. They are browsable and playable, but the
+/// playing is delegated to the service's own client, and they can never be synced to a
+/// Rockbox player because there is nothing to copy.
+public enum TrackSource: String, Codable, Sendable, CaseIterable {
+    case local
+    case appleMusic
+    case spotify
+
+    public var label: String {
+        switch self {
+        case .local: return "local"
+        case .appleMusic: return "apple music"
+        case .spotify: return "spotify"
+        }
+    }
+
+    /// True when the audio is streamed and no local file backs it.
+    public var isStreaming: Bool { self != .local }
+}
+
 // MARK: - Track
 
 public struct Track: Identifiable, Hashable, Codable, Sendable {
-    public var id: String { url.path }
+    /// Local tracks are identified by path. Streaming tracks have no meaningful path, so
+    /// they are identified by service plus the service's own id.
+    public var id: String {
+        source == .local ? url.path : "\(source.rawValue):\(externalID ?? url.path)"
+    }
+
+    /// Which service owns this track. Defaults to `.local` so an index written before
+    /// streaming existed still decodes.
+    public var source: TrackSource = .local
+
+    /// The service's identifier — a Music.app database ID, or a Spotify URI.
+    public var externalID: String?
+
+    public var isStreaming: Bool { source.isStreaming }
 
     public var url: URL
     public var title: String
@@ -42,6 +79,67 @@ public struct Track: Identifiable, Hashable, Codable, Sendable {
     }
 
     public static let unknown = "unknown"
+
+    /// Written by hand rather than synthesised.
+    ///
+    /// A synthesised `init(from:)` ignores property defaults and fails outright on a
+    /// missing key, so adding `source` would have invalidated every existing index and
+    /// forced a full rescan. `decodeIfPresent` lets an older index load unchanged.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        source = try c.decodeIfPresent(TrackSource.self, forKey: .source) ?? .local
+        externalID = try c.decodeIfPresent(String.self, forKey: .externalID)
+        url = try c.decode(URL.self, forKey: .url)
+        title = try c.decode(String.self, forKey: .title)
+        artist = try c.decode(String.self, forKey: .artist)
+        albumArtist = try c.decode(String.self, forKey: .albumArtist)
+        album = try c.decode(String.self, forKey: .album)
+        genre = try c.decodeIfPresent(String.self, forKey: .genre)
+        year = try c.decodeIfPresent(Int.self, forKey: .year)
+        trackNumber = try c.decodeIfPresent(Int.self, forKey: .trackNumber)
+        discNumber = try c.decodeIfPresent(Int.self, forKey: .discNumber)
+        duration = try c.decode(TimeInterval.self, forKey: .duration)
+        bitrate = try c.decodeIfPresent(Int.self, forKey: .bitrate)
+        sampleRate = try c.decodeIfPresent(Int.self, forKey: .sampleRate)
+        channels = try c.decodeIfPresent(Int.self, forKey: .channels)
+        codec = try c.decode(String.self, forKey: .codec)
+        fileSize = try c.decode(Int64.self, forKey: .fileSize)
+        modified = try c.decode(Date.self, forKey: .modified)
+        enriched = try c.decodeIfPresent(Bool.self, forKey: .enriched) ?? false
+        mbid = try c.decodeIfPresent(String.self, forKey: .mbid)
+    }
+
+    /// A track streamed from a service. There is no file, so the URL is synthetic and
+    /// exists only to keep the rest of the model uniform.
+    public init(
+        source: TrackSource,
+        externalID: String,
+        title: String, artist: String, albumArtist: String, album: String,
+        genre: String? = nil, year: Int? = nil, trackNumber: Int? = nil,
+        discNumber: Int? = nil, duration: TimeInterval, codec: String = "stream"
+    ) {
+        self.source = source
+        self.externalID = externalID
+        self.url = URL(string: "\(source.rawValue)://\(externalID)")
+            ?? URL(fileURLWithPath: "/\(source.rawValue)/\(externalID)")
+        self.title = title
+        self.artist = artist
+        self.albumArtist = albumArtist
+        self.album = album
+        self.genre = genre
+        self.year = year
+        self.trackNumber = trackNumber
+        self.discNumber = discNumber
+        self.duration = duration
+        self.bitrate = nil
+        self.sampleRate = nil
+        self.channels = nil
+        self.codec = codec
+        self.fileSize = 0
+        self.modified = .distantPast
+        self.enriched = false
+        self.mbid = nil
+    }
 
     public init(
         url: URL, title: String, artist: String, albumArtist: String, album: String,

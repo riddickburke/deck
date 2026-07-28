@@ -122,7 +122,10 @@ struct ConvertMenu: View {
     @EnvironmentObject var app: AppState
 
     private var convertible: [Track] {
-        tracks.filter { Transcoder.convertibleFormats.contains($0.url.pathExtension.lowercased()) }
+        tracks.filter {
+            !$0.isStreaming
+                && Transcoder.convertibleFormats.contains($0.url.pathExtension.lowercased())
+        }
     }
 
     var body: some View {
@@ -324,6 +327,12 @@ struct TrackRow: View {
 
             Spacer(minLength: 8)
 
+            if track.isStreaming {
+                Text("☁")
+                    .font(DeckFont.mono(9))
+                    .foregroundStyle(app.theme.magenta)
+                    .help("streams via Music.app — cannot be synced to a device")
+            }
             if track.needsMetadata {
                 Text("!")
                     .font(DeckFont.mono(10))

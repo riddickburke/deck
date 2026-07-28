@@ -10,7 +10,7 @@ struct NowPlayingView: View {
     @State private var tint: Color?
 
     private var album: Album? {
-        guard let track = player.currentTrack else { return nil }
+        guard let track = app.currentTrack else { return nil }
         return app.album(for: track.albumKey)
     }
 
@@ -75,7 +75,7 @@ struct NowPlayingView: View {
                 .font(DeckFont.mono(11))
                 .foregroundStyle(app.theme.fg)
             Spacer()
-            if let track = player.currentTrack {
+            if let track = app.currentTrack {
                 BracketButton(label: "go to album", compact: true) {
                     app.showNowPlaying = false
                     app.navigate(to: .album(track.albumKey))
@@ -93,15 +93,15 @@ struct NowPlayingView: View {
 
     private var trackInfo: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(player.currentTrack?.title ?? "nothing playing")
+            Text(app.currentTrack?.title ?? "nothing playing")
                 .font(DeckFont.mono(24, weight: .semibold))
                 .foregroundStyle(app.theme.fg)
                 .lineLimit(2)
-            Text(player.currentTrack?.artist ?? "—")
+            Text(app.currentTrack?.artist ?? "—")
                 .font(DeckFont.mono(14))
                 .foregroundStyle(app.theme.accent)
                 .lineLimit(1)
-            Text(player.currentTrack?.album ?? "")
+            Text(app.currentTrack?.album ?? "")
                 .font(DeckFont.mono(11))
                 .foregroundStyle(app.theme.muted)
                 .lineLimit(1)
@@ -110,7 +110,7 @@ struct NowPlayingView: View {
 
     private var details: some View {
         HStack(spacing: 14) {
-            if let track = player.currentTrack {
+            if let track = app.currentTrack {
                 if track.isLossless {
                     tag("lossless", color: app.theme.green)
                 }
@@ -143,8 +143,8 @@ struct NowPlayingView: View {
     private var scrubber: some View {
         VStack(spacing: 4) {
             GeometryReader { geo in
-                let fraction = player.duration > 0
-                    ? min(1, max(0, player.position / player.duration)) : 0
+                let fraction = app.duration > 0
+                    ? min(1, max(0, app.position / app.duration)) : 0
                 ZStack(alignment: .leading) {
                     Rectangle().fill(app.theme.border).frame(height: 4)
                     Rectangle().fill(app.theme.accent)
@@ -158,18 +158,18 @@ struct NowPlayingView: View {
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0).onEnded { value in
-                        guard player.duration > 0, geo.size.width > 0 else { return }
-                        player.seek(to: min(1, max(0, value.location.x / geo.size.width))
-                            * player.duration)
+                        guard app.duration > 0, geo.size.width > 0 else { return }
+                        app.seek(to: min(1, max(0, value.location.x / geo.size.width))
+                            * app.duration)
                     }
                 )
             }
             .frame(height: 14)
 
             HStack {
-                Text(player.position.clockString)
+                Text(app.position.clockString)
                 Spacer()
-                Text("-\(max(0, player.duration - player.position).clockString)")
+                Text("-\(max(0, app.duration - app.position).clockString)")
             }
             .font(DeckFont.mono(10))
             .foregroundStyle(app.theme.muted)
@@ -181,11 +181,11 @@ struct NowPlayingView: View {
             BracketButton(
                 label: "⇄", tint: player.shuffle ? app.theme.green : nil
             ) { app.toggleShuffle() }
-            BracketButton(label: "|◀") { player.previous() }
+            BracketButton(label: "|◀") { app.previousTrack() }
             BracketButton(
-                label: player.isPlaying ? "‖ pause" : "▶ play", tint: app.theme.accent
-            ) { player.toggle() }
-            BracketButton(label: "▶|") { player.next() }
+                label: app.isPlaying ? "‖ pause" : "▶ play", tint: app.theme.accent
+            ) { app.togglePlayPause() }
+            BracketButton(label: "▶|") { app.nextTrack() }
             BracketButton(
                 label: player.repeatMode == .one ? "↻1" : "↻",
                 tint: player.repeatMode == .off ? nil : app.theme.green

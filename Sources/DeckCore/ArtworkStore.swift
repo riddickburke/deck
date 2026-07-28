@@ -102,6 +102,15 @@ public actor ArtworkStore {
         return nil
     }
 
+    /// Adopts artwork obtained elsewhere — for example from Music.app over Apple
+    /// Events — so it participates in the same memory and disk cache as everything else.
+    public func store(_ data: Data, for key: AlbumKey) {
+        guard !data.isEmpty else { return }
+        try? data.write(to: cachePath(for: key), options: .atomic)
+        store(key, data)
+        misses.remove(key)
+    }
+
     public func cachePath(for key: AlbumKey) -> URL {
         let raw = "\(key.artist.lowercased())::\(key.album.lowercased())"
         return cacheDir.appendingPathComponent("\(StableHash.hex(raw)).jpg")

@@ -205,16 +205,16 @@ struct RootView: View {
             activateSelection()
             return .handled
         case .space:
-            app.player.toggle()
+            app.togglePlayPause()
             return .handled
         case .upArrow:
             move(-1); return .handled
         case .downArrow:
             move(1); return .handled
         case .leftArrow:
-            app.player.seekRelative(-5); return .handled
+            app.seekRelative(-5); return .handled
         case .rightArrow:
-            app.player.seekRelative(5); return .handled
+            app.seekRelative(5); return .handled
         default:
             break
         }
@@ -228,10 +228,10 @@ struct RootView: View {
         case "l": activateSelection()
         case "/": app.isSearching = true
         case ":": app.showCommandPalette = true
-        case "n": app.player.next()
-        case "p": app.player.previous()
-        case "H": app.player.seekRelative(-10)
-        case "L": app.player.seekRelative(10)
+        case "n": app.nextTrack()
+        case "p": app.previousTrack()
+        case "H": app.seekRelative(-10)
+        case "L": app.seekRelative(10)
         case "+", "=": app.adjustVolume(0.05)
         case "-", "_": app.adjustVolume(-0.05)
         case "s": app.toggleShuffle()

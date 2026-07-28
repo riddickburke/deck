@@ -55,11 +55,11 @@ struct NowPlayingBar: View {
                 .help("open now playing")
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(player.currentTrack?.title ?? "nothing playing")
+                Text(app.currentTrack?.title ?? "nothing playing")
                     .font(DeckFont.mono(11))
-                    .foregroundStyle(player.currentTrack == nil ? app.theme.muted : app.theme.fg)
+                    .foregroundStyle(app.currentTrack == nil ? app.theme.muted : app.theme.fg)
                     .lineLimit(1)
-                Text(player.currentTrack.map { "\($0.artist) — \($0.album)" } ?? "—")
+                Text(app.currentTrack.map { "\($0.artist) — \($0.album)" } ?? "—")
                     .font(DeckFont.mono(9))
                     .foregroundStyle(app.theme.muted)
                     .lineLimit(1)
@@ -67,7 +67,7 @@ struct NowPlayingBar: View {
             // The text still jumps to the album; only the cover opens now playing.
             .contentShape(Rectangle())
             .onTapGesture {
-                guard let track = player.currentTrack else { return }
+                guard let track = app.currentTrack else { return }
                 app.navigate(to: .album(track.albumKey))
             }
 
@@ -76,7 +76,7 @@ struct NowPlayingBar: View {
     }
 
     private var currentAlbum: Album? {
-        guard let track = player.currentTrack else { return nil }
+        guard let track = app.currentTrack else { return nil }
         return app.album(for: track.albumKey)
     }
 
@@ -88,14 +88,14 @@ struct NowPlayingBar: View {
                 label: "⇄", tint: player.shuffle ? app.theme.green : nil, compact: true
             ) { app.toggleShuffle() }
 
-            BracketButton(label: "|◀", compact: true) { player.previous() }
+            BracketButton(label: "|◀", compact: true) { app.previousTrack() }
 
             BracketButton(
-                label: player.isPlaying ? "‖ pause" : "▶ play",
+                label: app.isPlaying ? "‖ pause" : "▶ play",
                 tint: app.theme.accent
-            ) { player.toggle() }
+            ) { app.togglePlayPause() }
 
-            BracketButton(label: "▶|", compact: true) { player.next() }
+            BracketButton(label: "▶|", compact: true) { app.nextTrack() }
 
             BracketButton(
                 label: player.repeatMode == .one ? "↻1" : "↻",
@@ -107,14 +107,14 @@ struct NowPlayingBar: View {
 
     private var scrubber: some View {
         HStack(spacing: 8) {
-            Text(player.position.clockString)
+            Text(app.position.clockString)
                 .font(DeckFont.mono(9))
                 .foregroundStyle(app.theme.muted)
                 .frame(width: 38, alignment: .trailing)
 
             GeometryReader { geo in
-                let fraction = player.duration > 0
-                    ? min(1, max(0, player.position / player.duration)) : 0
+                let fraction = app.duration > 0
+                    ? min(1, max(0, app.position / app.duration)) : 0
                 ZStack(alignment: .leading) {
                     Rectangle().fill(app.theme.border).frame(height: 3)
                     Rectangle().fill(app.theme.accent)
@@ -129,15 +129,15 @@ struct NowPlayingBar: View {
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0).onEnded { value in
-                        guard player.duration > 0, geo.size.width > 0 else { return }
+                        guard app.duration > 0, geo.size.width > 0 else { return }
                         let ratio = min(1, max(0, value.location.x / geo.size.width))
-                        player.seek(to: ratio * player.duration)
+                        app.seek(to: ratio * app.duration)
                     }
                 )
             }
             .frame(height: 12)
 
-            Text(player.duration.clockString)
+            Text(app.duration.clockString)
                 .font(DeckFont.mono(9))
                 .foregroundStyle(app.theme.muted)
                 .frame(width: 38, alignment: .leading)
@@ -257,7 +257,7 @@ struct StatusBar: View {
                 player.shuffle ? "shuf:on" : "shuf:off",
                 background: .clear, foreground: app.theme.muted)
             segment(
-                "\(player.position.clockString)/\(player.duration.clockString)",
+                "\(app.position.clockString)/\(app.duration.clockString)",
                 background: .clear, foreground: app.theme.muted)
             segment(app.theme.id, background: app.theme.selection, foreground: app.theme.fg)
         }

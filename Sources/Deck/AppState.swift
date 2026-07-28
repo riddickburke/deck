@@ -20,7 +20,10 @@ enum Pane: Hashable { case sidebar, content }
 final class AppState: ObservableObject {
     // MARK: Library
 
+    /// Everything currently browsable — local plus any imported streaming sources.
     @Published var tracks: [Track] = []
+    /// Just what the filesystem scan produced.
+    @Published var localTracks: [Track] = []
     @Published var albums: [Album] = []
     @Published var playlists: [Playlist] = []
 
@@ -197,10 +200,10 @@ final class AppState: ObservableObject {
                 Task { @MainActor in self.scanProgress = progress }
             }
             await MainActor.run {
-                self.tracks = found.sorted {
+                self.localTracks = found.sorted {
                     $0.artist.localizedStandardCompare($1.artist) == .orderedAscending
                 }
-                self.albums = LibraryGrouping.albums(from: found)
+                self.rebuildLibrary()
                 self.isScanning = false
                 self.scanProgress = nil
                 self.statusMessage = "indexed \(found.count) tracks in \(self.albums.count) albums"
@@ -229,13 +232,57 @@ final class AppState: ObservableObject {
     // MARK: - Playback helpers
 
     func play(album: Album, startingAt index: Int = 0) {
-        player.setQueue(album.tracks, startAt: index)
-        persistPlaybackPrefs()
+        play(tracks: album.tracks, startingAt: index)
     }
 
     func play(tracks list: [Track], startingAt index: Int = 0) {
-        player.setQueue(list, startAt: index)
+        guard list.indices.contains(index) else { return }
+        let track = list[index]
+
+        // Apple Music tracks are DRM-protected streams with no file, so Music.app has to
+        // do the decoding. Anything local stays on the in-process engine, which is what
+        // keeps the EQ and spectrum working for the library Deck actually owns.
+        if track.source == .appleMusic {
+            startRemotePlayback(track)
+            return
+        }
+
+        if isRemoteActive { stopRemotePlayback() }
+        player.setQueue(list.filter { !$0.isStreaming }, startAt: index)
         persistPlaybackPrefs()
+    }
+
+    // MARK: Unified transport
+
+    func togglePlayPause() {
+        guard isRemoteActive else { player.toggle(); return }
+        let remote = appleMusicRemote
+        let playing = remoteIsPlaying
+        remoteIsPlaying.toggle()
+        Task { playing ? await remote.pause() : await remote.resume() }
+    }
+
+    func nextTrack() {
+        guard isRemoteActive else { player.next(); return }
+        let remote = appleMusicRemote
+        Task { await remote.next() }
+    }
+
+    func previousTrack() {
+        guard isRemoteActive else { player.previous(); return }
+        let remote = appleMusicRemote
+        Task { await remote.previous() }
+    }
+
+    func seek(to seconds: TimeInterval) {
+        guard isRemoteActive else { player.seek(to: seconds); return }
+        remotePosition = seconds
+        let remote = appleMusicRemote
+        Task { await remote.seek(to: seconds) }
+    }
+
+    func seekRelative(_ delta: TimeInterval) {
+        seek(to: max(0, min(duration, position + delta)))
     }
 
     func toggleShuffle() {
@@ -253,9 +300,13 @@ final class AppState: ObservableObject {
     }
 
     func adjustVolume(_ delta: Float) {
-        let v = max(0, min(1, player.volume + delta))
+        let v = max(0, min(1, config.volume + delta))
         player.volume = v
         config.volume = v
+        if isRemoteActive {
+            let remote = appleMusicRemote
+            Task { await remote.setVolume(v) }
+        }
     }
 
     private func persistPlaybackPrefs() {
@@ -389,6 +440,137 @@ final class AppState: ObservableObject {
     func cancelSync() {
         Task { await syncEngine.cancel() }
         statusMessage = "cancelling…"
+    }
+
+    // MARK: - Streaming sources
+
+    @Published var appleMusicTracks: [Track] = []
+    @Published var isImportingAppleMusic = false
+    @Published var appleMusicError: String?
+    /// nil shows everything; otherwise only that source.
+    @Published var sourceFilter: TrackSource? { didSet { rebuildLibrary() } }
+
+    let appleMusicRemote = AppleMusicRemote()
+
+    /// Which engine owns playback right now. Apple Music tracks are played by Music.app,
+    /// so the transport has to be pointed at whichever is actually running.
+    @Published private(set) var activeBackend: TrackSource = .local
+    @Published private(set) var remoteTrack: Track?
+    @Published private(set) var remoteIsPlaying = false
+    @Published private(set) var remotePosition: TimeInterval = 0
+    @Published private(set) var remoteDuration: TimeInterval = 0
+    private var remoteTimer: Timer?
+
+    var isRemoteActive: Bool { activeBackend != .local }
+
+    // Unified transport, so views do not have to know which engine is playing.
+    var currentTrack: Track? { isRemoteActive ? remoteTrack : player.currentTrack }
+    var isPlaying: Bool { isRemoteActive ? remoteIsPlaying : player.isPlaying }
+    var position: TimeInterval { isRemoteActive ? remotePosition : player.position }
+    var duration: TimeInterval { isRemoteActive ? remoteDuration : player.duration }
+
+    var availableSources: [TrackSource] {
+        var sources: [TrackSource] = [.local]
+        if !appleMusicTracks.isEmpty { sources.append(.appleMusic) }
+        return sources
+    }
+
+    /// Recomputes the browsable library from the enabled sources.
+    func rebuildLibrary() {
+        let combined: [Track]
+        switch sourceFilter {
+        case .local: combined = localTracks
+        case .appleMusic: combined = appleMusicTracks
+        case .spotify: combined = []
+        case nil: combined = localTracks + appleMusicTracks
+        }
+        tracks = combined
+        albums = LibraryGrouping.albums(from: combined)
+    }
+
+    func importAppleMusic() {
+        guard !isImportingAppleMusic else { return }
+        isImportingAppleMusic = true
+        appleMusicError = nil
+        statusMessage = "reading Music.app library…"
+
+        Task {
+            do {
+                let imported = try await AppleMusicLibrary.importLibrary()
+                await MainActor.run {
+                    self.appleMusicTracks = imported
+                    self.isImportingAppleMusic = false
+                    self.rebuildLibrary()
+                    let cloud = imported.count { AppleMusicLibrary.isCloudBacked($0) }
+                    self.statusMessage =
+                        "apple music: \(imported.count) tracks, \(cloud) from the cloud"
+                }
+            } catch {
+                await MainActor.run {
+                    self.isImportingAppleMusic = false
+                    self.appleMusicError = error.localizedDescription
+                    self.statusMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    // MARK: Remote transport
+
+    private func startRemotePlayback(_ track: Track) {
+        guard let id = track.externalID else { return }
+
+        // Stop the local engine first; two things playing at once is the obvious failure.
+        player.pause()
+
+        activeBackend = .appleMusic
+        remoteTrack = track
+        remoteDuration = track.duration
+        remotePosition = 0
+        remoteIsPlaying = true
+
+        Task {
+            do {
+                try await appleMusicRemote.play(trackID: id)
+                await appleMusicRemote.setVolume(config.volume)
+            } catch {
+                await MainActor.run {
+                    self.statusMessage = error.localizedDescription
+                    self.remoteIsPlaying = false
+                }
+            }
+        }
+        startRemotePolling()
+    }
+
+    /// Music.app is a separate process, so its state can only be observed by asking.
+    private func startRemotePolling() {
+        remoteTimer?.invalidate()
+        remoteTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isRemoteActive else { return }
+                let state = await self.appleMusicRemote.refreshState()
+                self.remoteIsPlaying = state.isPlaying
+                self.remotePosition = state.position
+                if state.duration > 0 { self.remoteDuration = state.duration }
+
+                // Music.app advancing on its own should move our queue with it.
+                if let id = state.trackID, id != self.remoteTrack?.externalID,
+                   let match = self.appleMusicTracks.first(where: { $0.externalID == id }) {
+                    self.remoteTrack = match
+                }
+            }
+        }
+    }
+
+    private func stopRemotePlayback() {
+        remoteTimer?.invalidate()
+        remoteTimer = nil
+        let remote = appleMusicRemote
+        Task { await remote.stop() }
+        activeBackend = .local
+        remoteTrack = nil
+        remoteIsPlaying = false
     }
 
     // MARK: - Conversion

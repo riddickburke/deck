@@ -29,6 +29,8 @@ public struct SyncPlan: Sendable {
     public var orphans: [URL]
     public var device: RockboxDevice
     public var playlists: [Playlist]
+    /// Tracks left out because they stream and have no file to copy.
+    public var skippedStreaming: Int = 0
 
     public var transfers: [SyncAction] { actions.filter { $0.kind != .upToDate } }
     public var upToDateCount: Int { actions.count { $0.kind == .upToDate } }
@@ -47,12 +49,14 @@ public struct SyncPlan: Sendable {
     public var fits: Bool { headroomAfterSync >= 0 }
 
     public init(
-        actions: [SyncAction], orphans: [URL], device: RockboxDevice, playlists: [Playlist]
+        actions: [SyncAction], orphans: [URL], device: RockboxDevice,
+        playlists: [Playlist], skippedStreaming: Int = 0
     ) {
         self.actions = actions
         self.orphans = orphans
         self.device = device
         self.playlists = playlists
+        self.skippedStreaming = skippedStreaming
     }
 }
 
@@ -114,8 +118,15 @@ public actor SyncEngine {
         let manifest = Manifest.load(device: device)
         var actions: [SyncAction] = []
         var claimed = Set<String>()
+        var skippedStreaming = 0
 
         for track in tracks {
+            // Streaming tracks have no file behind them. Skipping here rather than
+            // failing mid-transfer keeps the plan's counts and size estimate honest.
+            guard !track.isStreaming else {
+                skippedStreaming += 1
+                continue
+            }
             let convert = Transcoder.shouldConvert(track, config: config)
             let destination = Self.destinationURL(
                 for: track, device: device, template: config.deviceFolderTemplate, asMP3: convert)
@@ -149,7 +160,9 @@ public actor SyncEngine {
         }
 
         let orphans = Self.findOrphans(manifest: manifest, expected: claimed)
-        return SyncPlan(actions: actions, orphans: orphans, device: device, playlists: playlists)
+        return SyncPlan(
+            actions: actions, orphans: orphans, device: device,
+            playlists: playlists, skippedStreaming: skippedStreaming)
     }
 
     /// Files we previously wrote that are no longer part of the selection. We only ever

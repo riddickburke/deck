@@ -89,6 +89,12 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <string>Deck needs access to read music folders you add from your Documents.</string>
   <key>NSDownloadsFolderUsageDescription</key>
   <string>Deck needs access to read music folders you add from your Downloads.</string>
+  <!-- Apple Music: Deck browses the Music.app library and drives playback there,
+       because subscription tracks are DRM-protected streams it cannot decode itself. -->
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Deck controls Music to browse your Apple Music library and play tracks.</string>
+  <key>NSAppleMusicUsageDescription</key>
+  <string>Deck reads your Apple Music library so you can browse and play it in Deck.</string>
 </dict>
 </plist>
 PLIST
