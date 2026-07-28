@@ -32,18 +32,22 @@ struct RootView: View {
                 }
             }
 
-            // Sits above the pager, below the now-playing sheet.
+            // Docked above the pager. Present whenever there is a track, including
+            // while paused — a transport that disappears on pause leaves no way back.
             if playback.currentTrack != nil {
                 MiniPlayer()
                     .padding(.horizontal, 8)
                     .padding(.bottom, 6)
-                    // Fades out as the sheet takes over, so the two are never both
-                    // showing the same track at once.
-                    .opacity(1 - Double(min(1, app.nowPlayingProgress * 2.2)))
-                    .allowsHitTesting(!app.isNowPlayingOpen)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-
-            NowPlayingSheet()
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: playback.currentTrack?.id)
+        .fullScreenCover(isPresented: $app.isNowPlayingOpen) {
+            NowPlayingScreen()
+                .environmentObject(app)
+                .environmentObject(playback)
+                .environmentObject(playback.clock)
+                .environmentObject(app.visualizer)
         }
         // Sheets are presented in their own environment, so every object the content
         // reads has to be handed across explicitly.
@@ -59,7 +63,10 @@ struct RootView: View {
                 .environmentObject(playback)
                 .presentationDragIndicator(.visible)
         }
-        .task { await app.loadIfNeeded() }
+        .task {
+            await app.loadIfNeeded()
+            if SelfTest.isEnabled { await SelfTest.run(playback: playback) }
+        }
     }
 
     // MARK: - Chrome

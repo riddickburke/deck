@@ -8,9 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		533272F5CE52EE08FB1ACB85 /* DeckMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9054F5817A1A7FB5952DE56B /* DeckMobileApp.swift */; };
+		61F544656DC35BE38B6A067F /* Diagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D33844562372C011559FC74 /* Diagnostics.swift */; };
 		0DBB49A4A08C618531180107 /* MobileState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547ACBEAC3322E72D5266448 /* MobileState.swift */; };
 		137ECB103C37B94A8DD69793 /* MusicLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 336EFE5A4B82D04B3A1865E4 /* MusicLibrary.swift */; };
 		8E0C17C63A66425F93C8D932 /* Playback.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0A3BB036B732775642351E2 /* Playback.swift */; };
+		83107ADB6CE37013A90BA1D9 /* SelfTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A7AA434D59FDB8252ACB050 /* SelfTest.swift */; };
 		ABBA14BCCD525B1E315CC032 /* LibraryPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F48900D33C5175184BE992E /* LibraryPages.swift */; };
 		2E41304E4FF5BF1186B53D77 /* NowPlaying.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AB332F77C39757100A137E4 /* NowPlaying.swift */; };
 		7F2083E388A7BF50E4CAC186 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 061C677EFA7A74C7E6886604 /* RootView.swift */; };
@@ -29,9 +31,11 @@
 
 /* Begin PBXFileReference section */
 		9054F5817A1A7FB5952DE56B /* DeckMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeckMobileApp.swift; path = "DeckMobile/DeckMobileApp.swift"; sourceTree = "<group>"; };
+		0D33844562372C011559FC74 /* Diagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Diagnostics.swift; path = "DeckMobile/Diagnostics.swift"; sourceTree = "<group>"; };
 		547ACBEAC3322E72D5266448 /* MobileState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MobileState.swift; path = "DeckMobile/MobileState.swift"; sourceTree = "<group>"; };
 		336EFE5A4B82D04B3A1865E4 /* MusicLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MusicLibrary.swift; path = "DeckMobile/MusicLibrary.swift"; sourceTree = "<group>"; };
 		B0A3BB036B732775642351E2 /* Playback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Playback.swift; path = "DeckMobile/Playback.swift"; sourceTree = "<group>"; };
+		0A7AA434D59FDB8252ACB050 /* SelfTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SelfTest.swift; path = "DeckMobile/SelfTest.swift"; sourceTree = "<group>"; };
 		1F48900D33C5175184BE992E /* LibraryPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LibraryPages.swift; path = "DeckMobile/Views/LibraryPages.swift"; sourceTree = "<group>"; };
 		0AB332F77C39757100A137E4 /* NowPlaying.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NowPlaying.swift; path = "DeckMobile/Views/NowPlaying.swift"; sourceTree = "<group>"; };
 		061C677EFA7A74C7E6886604 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = "DeckMobile/Views/RootView.swift"; sourceTree = "<group>"; };
@@ -78,9 +82,11 @@
 			isa = PBXGroup;
 			children = (
 				9054F5817A1A7FB5952DE56B /* DeckMobileApp.swift */,
+				0D33844562372C011559FC74 /* Diagnostics.swift */,
 				547ACBEAC3322E72D5266448 /* MobileState.swift */,
 				336EFE5A4B82D04B3A1865E4 /* MusicLibrary.swift */,
 				B0A3BB036B732775642351E2 /* Playback.swift */,
+				0A7AA434D59FDB8252ACB050 /* SelfTest.swift */,
 				46C76E3711D7D06182832257 /* Views */,
 			);
 			name = DeckMobile;
@@ -196,9 +202,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				533272F5CE52EE08FB1ACB85 /* DeckMobileApp.swift in Sources */,
+				61F544656DC35BE38B6A067F /* Diagnostics.swift in Sources */,
 				0DBB49A4A08C618531180107 /* MobileState.swift in Sources */,
 				137ECB103C37B94A8DD69793 /* MusicLibrary.swift in Sources */,
 				8E0C17C63A66425F93C8D932 /* Playback.swift in Sources */,
+				83107ADB6CE37013A90BA1D9 /* SelfTest.swift in Sources */,
 				ABBA14BCCD525B1E315CC032 /* LibraryPages.swift in Sources */,
 				2E41304E4FF5BF1186B53D77 /* NowPlaying.swift in Sources */,
 				7F2083E388A7BF50E4CAC186 /* RootView.swift in Sources */,

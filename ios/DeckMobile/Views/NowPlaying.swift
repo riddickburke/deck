@@ -3,17 +3,17 @@ import SwiftUI
 
 // MARK: - Mini player
 
-/// The docked transport, and the handle for the now-playing sheet.
+/// The docked transport, and the way into the full-screen now-playing screen.
 ///
 /// Three gestures share this one surface:
 ///   - tap            → open now playing
-///   - drag up        → open now playing, following the finger
+///   - swipe up       → open now playing
 ///   - swipe sideways → previous / next track
 ///
-/// They are disambiguated by whichever axis the finger commits to first, latched for the
-/// rest of the gesture. Deciding per frame instead lets a diagonal drag flip between
-/// scrubbing tracks and opening the sheet, which feels broken in a way that is hard to
-/// describe but immediately obvious to use.
+/// The vertical and horizontal cases are told apart by whichever axis the finger commits
+/// to first, latched for the rest of the gesture. Deciding per frame instead lets a
+/// diagonal drag flip between skipping tracks and opening the screen, which feels broken
+/// in a way that is hard to describe but immediate to use.
 struct MiniPlayer: View {
     @EnvironmentObject var app: MobileState
     @EnvironmentObject var playback: Playback
@@ -22,9 +22,6 @@ struct MiniPlayer: View {
     @State private var horizontalOffset: CGFloat = 0
 
     private enum DragAxis { case undecided, vertical, horizontal }
-
-    /// How far up the finger must travel for the sheet to be fully open.
-    private let expandDistance: CGFloat = 260
 
     var body: some View {
         let track = playback.currentTrack
@@ -45,7 +42,6 @@ struct MiniPlayer: View {
 
             Spacer(minLength: 4)
 
-            // A compact spectrum doubles as a playing indicator.
             if app.showsVisualizer {
                 SpectrumView(tint: app.theme.accent.opacity(0.55), barSpacing: 2)
                     .frame(width: 42, height: 20)
@@ -80,31 +76,22 @@ struct MiniPlayer: View {
     }
 
     private var drag: some Gesture {
-        DragGesture(minimumDistance: 8)
+        DragGesture(minimumDistance: 12)
             .onChanged { value in
                 if axis == .undecided {
                     axis = abs(value.translation.height) > abs(value.translation.width)
                         ? .vertical : .horizontal
                 }
-                switch axis {
-                case .vertical:
-                    // Only upward travel opens; downward is ignored rather than
-                    // producing negative progress.
-                    let lifted = max(0, -value.translation.height)
-                    app.nowPlayingProgress = min(1, lifted / expandDistance)
-                case .horizontal:
-                    // Rubber-banded: the row follows the finger but at a fraction of
-                    // the distance, so it reads as a control rather than a scroll view.
+                if axis == .horizontal {
+                    // Rubber-banded: follows the finger at a fraction of the distance,
+                    // so it reads as a control rather than a scroll view.
                     horizontalOffset = value.translation.width * 0.35
-                default:
-                    break
                 }
             }
             .onEnded { value in
                 switch axis {
                 case .vertical:
-                    let flung = value.predictedEndTranslation.height < -180
-                    setOpen(flung || app.nowPlayingProgress > 0.35)
+                    if value.translation.height < -40 { open() }
                 case .horizontal:
                     if value.translation.width < -60 {
                         playback.next()
@@ -125,114 +112,113 @@ struct MiniPlayer: View {
 
     private func open() {
         Haptics.tap()
-        setOpen(true)
-    }
-
-    private func setOpen(_ open: Bool) {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
-            app.nowPlayingProgress = open ? 1 : 0
-        }
+        app.isNowPlayingOpen = true
     }
 }
 
-// MARK: - Now playing sheet
+// MARK: - Now playing
 
-/// The full-screen transport, presented by dragging the mini player up.
+/// The full-screen transport.
 ///
-/// Not a `.sheet`: a system sheet cannot be driven from a drag that starts on another
-/// view, and its grabber and inset corners are stock iOS chrome sitting on top of a
-/// deliberately non-stock design. Offsetting a plain overlay keeps the whole surface ours
-/// and makes the open gesture continuous with the mini player's.
-struct NowPlayingSheet: View {
+/// Presented as a `fullScreenCover`, which is what full screen means on iOS: it owns the
+/// whole display, it cannot intercept touches meant for the library when closed, and it
+/// gets the system's own presentation rather than an offset this code has to animate.
+///
+/// The layout follows the shape people already know from Spotify and Apple Music — art,
+/// then titles, then position, then transport, top to bottom — while the surface itself
+/// stays in the app's own language: monospace, square corners, bracket buttons.
+struct NowPlayingScreen: View {
     @EnvironmentObject var app: MobileState
     @EnvironmentObject var playback: Playback
+
     @State private var dragOffset: CGFloat = 0
 
     var body: some View {
         GeometryReader { geo in
-            let height = geo.size.height + geo.safeAreaInsets.top + geo.safeAreaInsets.bottom
-            let hidden = height * (1 - app.nowPlayingProgress)
+            let art = min(geo.size.width - 48, geo.size.height * 0.42)
 
-            content
-                .frame(width: geo.size.width, height: geo.size.height)
-                .background(app.theme.bg)
-                .offset(y: hidden + dragOffset)
-                .ignoresSafeArea(edges: .bottom)
-        }
-        .ignoresSafeArea()
-        // Fully out of the way when closed, so it cannot intercept touches meant for
-        // the library underneath.
-        .allowsHitTesting(app.isNowPlayingOpen)
-    }
+            VStack(spacing: 0) {
+                header
 
-    private var content: some View {
-        VStack(spacing: 0) {
-            handle
+                Spacer(minLength: 8)
 
-            let track = playback.currentTrack
+                artwork(size: art)
 
-            VStack(spacing: 22) {
-                artwork(for: track)
+                Spacer(minLength: 12)
 
-                VStack(spacing: 5) {
-                    Text(track?.title ?? "nothing playing")
-                        .font(DeckFont.mono(17, weight: .semibold))
-                        .foregroundStyle(app.theme.fg)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                    Text(track?.artist ?? "—")
-                        .font(DeckFont.mono(12))
-                        .foregroundStyle(app.theme.muted)
-                        .lineLimit(1)
-                    Text(track?.album ?? "")
-                        .font(DeckFont.mono(10))
-                        .foregroundStyle(app.theme.muted.opacity(0.7))
-                        .lineLimit(1)
+                titles
+                    .padding(.horizontal, 24)
+
+                Spacer(minLength: 12)
+
+                if app.showsVisualizer {
+                    visualizer.padding(.horizontal, 24)
+                    Spacer(minLength: 12)
                 }
-                .padding(.horizontal, 28)
-
-                visualizer
 
                 Scrubber()
-                transport
-            }
-            .padding(.horizontal, 22)
+                    .padding(.horizontal, 24)
 
-            Spacer(minLength: 0)
+                transport
+                    .padding(.horizontal, 16)
+
+                Spacer(minLength: 8)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
-        .padding(.top, 8)
+        .background(app.theme.bg.ignoresSafeArea())
+        .offset(y: dragOffset)
+        // Swipe down anywhere to dismiss, the gesture every full-screen player has.
+        .gesture(
+            DragGesture(minimumDistance: 12)
+                .onChanged { value in dragOffset = max(0, value.translation.height) }
+                .onEnded { value in
+                    if value.translation.height > 120 || value.predictedEndTranslation.height > 240 {
+                        close()
+                    } else {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                            dragOffset = 0
+                        }
+                    }
+                })
     }
 
     // MARK: Pieces
 
-    private var handle: some View {
-        VStack(spacing: 10) {
-            Rectangle()
-                .fill(app.theme.border)
-                .frame(width: 44, height: 3)
-            HStack {
-                BracketButton(label: "▾ close") { close() }
-                Spacer()
-                Text("deck://now-playing")
-                    .font(DeckFont.mono(10))
-                    .foregroundStyle(app.theme.muted)
+    private var header: some View {
+        HStack {
+            Button { close() } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(app.theme.fg)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
-            .padding(.horizontal, 18)
+
+            Spacer()
+
+            Text("deck://now-playing")
+                .font(DeckFont.mono(10))
+                .foregroundStyle(app.theme.muted)
+
+            Spacer()
+
+            // Balances the chevron so the label stays centred.
+            Color.clear.frame(width: 44, height: 44)
         }
-        .padding(.top, 46)
-        .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .gesture(dismissDrag)
+        .padding(.horizontal, 8)
+        .padding(.top, 6)
     }
 
-    /// Artwork is also the transport: swipe across it for previous and next.
-    private func artwork(for track: Track?) -> some View {
-        Artwork(trackID: track?.externalID, size: 280)
+    /// Artwork doubles as the transport: swipe across it for previous and next.
+    private func artwork(size: CGFloat) -> some View {
+        Artwork(trackID: playback.currentTrack?.externalID, size: size)
             .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 24)
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 30)
                     .onEnded { value in
-                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                        guard abs(value.translation.width) > abs(value.translation.height)
+                        else { return }
                         if value.translation.width < -50 {
                             playback.next()
                             Haptics.commit()
@@ -243,51 +229,51 @@ struct NowPlayingSheet: View {
                     })
     }
 
-    @ViewBuilder
-    private var visualizer: some View {
-        if app.showsVisualizer {
-            VStack(spacing: 6) {
-                SpectrumView(tint: app.theme.accent)
-                    .frame(height: 54)
-                // The bars are generated, not measured — the audio is decoded by the
-                // system music player and never passes through this process. Saying so
-                // costs one line and stops the display from being a quiet lie.
-                Text("visual only · not measured from the audio")
-                    .font(DeckFont.mono(8))
-                    .foregroundStyle(app.theme.muted.opacity(0.55))
-            }
-            .allowsHitTesting(false)
+    private var titles: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(playback.currentTrack?.title ?? "nothing playing")
+                .font(DeckFont.mono(19, weight: .semibold))
+                .foregroundStyle(app.theme.fg)
+                .lineLimit(2)
+            Text(playback.currentTrack?.artist ?? "—")
+                .font(DeckFont.mono(13))
+                .foregroundStyle(app.theme.muted)
+                .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var visualizer: some View {
+        VStack(spacing: 6) {
+            SpectrumView(tint: app.theme.accent)
+                .frame(height: 46)
+            // The bars are generated, not measured — the audio is decoded by the system
+            // music player and never passes through this process. Saying so costs one
+            // line and stops the display being a quiet lie.
+            Text("visual only · not measured from the audio")
+                .font(DeckFont.mono(8))
+                .foregroundStyle(app.theme.muted.opacity(0.55))
+        }
+        .allowsHitTesting(false)
     }
 
     private var transport: some View {
         HStack(spacing: 0) {
             transportButton("shuffle",
                             active: playback.shuffleMode == .songs,
-                            size: 15) {
-                playback.toggleShuffle()
-            }
+                            size: 16) { playback.toggleShuffle() }
 
-            transportButton("backward.fill", size: 22) { playback.previous() }
+            transportButton("backward.fill", size: 26) { playback.previous() }
 
             transportButton(playback.isPlaying ? "pause.fill" : "play.fill",
-                            size: 30) {
-                playback.toggle()
-            }
+                            size: 34) { playback.toggle() }
 
-            transportButton("forward.fill", size: 22) { playback.next() }
+            transportButton("forward.fill", size: 26) { playback.next() }
 
-            transportButton(repeatSymbol,
+            transportButton(playback.repeatMode == .one ? "repeat.1" : "repeat",
                             active: playback.repeatMode != MPMusicRepeatMode.none,
-                            size: 15) {
-                playback.cycleRepeat()
-            }
+                            size: 16) { playback.cycleRepeat() }
         }
-        .padding(.top, 2)
-    }
-
-    private var repeatSymbol: String {
-        playback.repeatMode == .one ? "repeat.1" : "repeat"
     }
 
     private func transportButton(
@@ -301,36 +287,15 @@ struct NowPlayingSheet: View {
                 .font(.system(size: size))
                 .foregroundStyle(active ? app.theme.accent : app.theme.fg)
                 .frame(maxWidth: .infinity)
-                .frame(height: 54)
+                .frame(height: 60)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 
-    // MARK: Dismissal
-
-    private var dismissDrag: some Gesture {
-        DragGesture(minimumDistance: 8)
-            .onChanged { value in
-                dragOffset = max(0, value.translation.height)
-            }
-            .onEnded { value in
-                let flung = value.predictedEndTranslation.height > 220
-                if flung || value.translation.height > 140 {
-                    close()
-                } else {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-                        dragOffset = 0
-                    }
-                }
-            }
-    }
-
     private func close() {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
-            app.nowPlayingProgress = 0
-            dragOffset = 0
-        }
+        dragOffset = 0
+        app.isNowPlayingOpen = false
     }
 }
 
@@ -346,8 +311,8 @@ private struct Scrubber: View {
     /// Non-nil while a finger is down.
     ///
     /// The bar has to follow the finger rather than the player, because seeking only
-    /// happens on release — without this the thumb springs back to the real position on
-    /// every frame and the control cannot be dragged at all.
+    /// happens on release — without this the position springs back to the player's real
+    /// value on every tick and the control cannot be dragged at all.
     @State private var scrubbing: Double?
 
     var body: some View {
@@ -368,7 +333,8 @@ private struct Scrubber: View {
                 .frame(height: 4)
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
-                .gesture(
+                // High priority, or the screen's swipe-to-dismiss claims the drag first.
+                .highPriorityGesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
                             let ratio = value.location.x / max(geo.size.width, 1)

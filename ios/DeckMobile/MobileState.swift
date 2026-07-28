@@ -37,6 +37,12 @@ final class MobileState: ObservableObject {
     @Published private(set) var artists: [String] = []
     @Published private(set) var playlists: [ServicePlaylist] = []
 
+    /// Title-sorted, computed once per load.
+    ///
+    /// The songs page had this as a computed property, which re-sorted three thousand
+    /// tracks on every single body evaluation — including every frame of a scroll.
+    @Published private(set) var sortedTracks: [Track] = []
+
     @Published private(set) var isLoading = false
     @Published private(set) var authorization: MPMediaLibraryAuthorizationStatus =
         MusicLibrary.authorizationStatus
@@ -54,10 +60,14 @@ final class MobileState: ObservableObject {
     /// the way of the keyboard.
     @Published var isEditingText = false
 
-    /// 0 = mini player docked, 1 = now playing fully open. Intermediate values are live
-    /// drag positions, which is what lets the sheet track a finger instead of snapping.
-    @Published var nowPlayingProgress: CGFloat = 0
-    var isNowPlayingOpen: Bool { nowPlayingProgress > 0.5 }
+    /// Whether the full-screen now-playing screen is up.
+    ///
+    /// A plain flag driving a `fullScreenCover`, rather than the drag-progress value
+    /// this used to be. Hand-offsetting an overlay gave an interactive open gesture, but
+    /// it put a full-size, always-present view on top of the whole app and depended on
+    /// hit-testing being disabled correctly to stay out of the way. A cover is what
+    /// "full screen" actually means on iOS, and it cannot swallow touches when closed.
+    @Published var isNowPlayingOpen = false
 
     // MARK: - Appearance
 
@@ -103,7 +113,11 @@ final class MobileState: ObservableObject {
     func reload() async {
         if authorization != .authorized {
             authorization = await MusicLibrary.requestAuthorization()
-            guard authorization == .authorized else { return }
+            Log.library.notice("authorization status: \(self.authorization.rawValue)")
+            guard authorization == .authorized else {
+                Log.library.error("not authorized, nothing will load")
+                return
+            }
         }
 
         isLoading = true
@@ -113,6 +127,8 @@ final class MobileState: ObservableObject {
         tracks = snapshot.tracks
         playlists = snapshot.playlists
         rebuildDerived()
+        Log.library.notice(
+            "loaded \(self.tracks.count) tracks, \(self.albums.count) albums, \(self.playlists.count) playlists")
     }
 
     /// Albums and artists are derived rather than stored, so they cannot drift out of
@@ -132,6 +148,10 @@ final class MobileState: ObservableObject {
 
         artists = Set(tracks.map { $0.albumArtist.isEmpty ? $0.artist : $0.albumArtist })
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+
+        sortedTracks = tracks.sorted {
+            $0.title.localizedStandardCompare($1.title) == .orderedAscending
+        }
     }
 
     // MARK: - Queries

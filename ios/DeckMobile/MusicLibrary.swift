@@ -65,9 +65,15 @@ enum MusicLibrary {
             value: MPMediaType.music.rawValue,
             forProperty: MPMediaItemPropertyMediaType))
 
-        guard let items = query.items else { return [] }
+        guard let items = query.items else {
+            Log.library.error("MPMediaQuery.songs() returned nil items")
+            return []
+        }
         index.replace(with: items)
-        return items.compactMap(track(from:))
+        let tracks = items.compactMap(track(from:))
+        Log.library.notice(
+            "query returned \(items.count) items, \(tracks.count) usable tracks")
+        return tracks
     }
 
     /// Converts one MediaPlayer item into the shared model.
@@ -201,6 +207,19 @@ enum MusicLibrary {
     /// `MPMediaItemArtwork` renders on demand at the requested size, so this avoids
     /// decoding a full-resolution cover to fill a 44pt row.
     static func artwork(forID id: String, size: CGSize) -> UIImage? {
-        item(forID: id)?.artwork?.image(at: size)
+        guard let item = item(forID: id) else {
+            Log.artwork.error("no item in index for requested id")
+            return nil
+        }
+        guard let artwork = item.artwork else {
+            Log.artwork.notice("item has no artwork")
+            return nil
+        }
+        let image = artwork.image(at: size)
+        if image == nil {
+            Log.artwork.error(
+                "image(at: \(Int(size.width))) returned nil, artwork bounds \(Int(artwork.bounds.width))")
+        }
+        return image
     }
 }

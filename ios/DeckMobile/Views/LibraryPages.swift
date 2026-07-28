@@ -109,29 +109,45 @@ private extension View {
 struct AlbumsPage: View {
     @EnvironmentObject var app: MobileState
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
-    ]
+    private static let spacing: CGFloat = 10
+    private static let padding: CGFloat = 12
 
     var body: some View {
         LibraryPageFrame(title: "deck://albums", count: app.albums.count) {
-            ScrollView {
-                LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(app.albums) { album in
-                        NavigationLink(value: NavigationTarget.album(album.key)) {
-                            AlbumCell(album: album)
-                        }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("play") { app.playback.play(tracks: album.tracks) }
-                            Button("play next") { app.playback.playNext(album.tracks) }
-                            Button("add to queue") { app.playback.enqueue(album.tracks) }
+            // One GeometryReader for the whole grid, not one per cell.
+            //
+            // A GeometryReader inside a LazyVGrid cell has no intrinsic size of its
+            // own, so the grid cannot work out a row height and lays out a single
+            // enormous cell — which looked exactly like "album art is broken".
+            // Measuring once here and passing a plain number down keeps every cell a
+            // simple, self-sizing stack.
+            GeometryReader { geo in
+                let available = geo.size.width - Self.padding * 2
+                let cell = max(80, (available - Self.spacing) / 2)
+
+                ScrollView {
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.fixed(cell), spacing: Self.spacing),
+                            GridItem(.fixed(cell), spacing: Self.spacing),
+                        ],
+                        spacing: 16
+                    ) {
+                        ForEach(app.albums) { album in
+                            NavigationLink(value: NavigationTarget.album(album.key)) {
+                                AlbumCell(album: album, width: cell)
+                            }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("play") { app.playback.play(tracks: album.tracks) }
+                                Button("play next") { app.playback.playNext(album.tracks) }
+                                Button("add to queue") { app.playback.enqueue(album.tracks) }
+                            }
                         }
                     }
+                    .padding(Self.padding)
+                    .padding(.bottom, 90)
                 }
-                .padding(12)
-                .padding(.bottom, 90)
             }
         }
     }
@@ -139,24 +155,22 @@ struct AlbumsPage: View {
 
 private struct AlbumCell: View {
     let album: Album
+    let width: CGFloat
     @EnvironmentObject var app: MobileState
 
     var body: some View {
-        GeometryReader { geo in
-            VStack(alignment: .leading, spacing: 6) {
-                Artwork(trackID: album.tracks.first?.externalID, size: geo.size.width)
-                Text(album.title)
-                    .font(DeckFont.mono(11))
-                    .foregroundStyle(app.theme.fg)
-                    .lineLimit(1)
-                Text(album.artist)
-                    .font(DeckFont.mono(9))
-                    .foregroundStyle(app.theme.muted)
-                    .lineLimit(1)
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Artwork(trackID: album.tracks.first?.externalID, size: width)
+            Text(album.title)
+                .font(DeckFont.mono(11))
+                .foregroundStyle(app.theme.fg)
+                .lineLimit(1)
+            Text(album.artist)
+                .font(DeckFont.mono(9))
+                .foregroundStyle(app.theme.muted)
+                .lineLimit(1)
         }
-        // Square art plus two lines of text.
-        .aspectRatio(0.78, contentMode: .fit)
+        .frame(width: width, alignment: .leading)
     }
 }
 
@@ -205,15 +219,11 @@ struct SongsPage: View {
     // Observed, not just called: the row highlight has to follow the current track.
     @EnvironmentObject var playback: Playback
 
-    /// Sorted by title rather than in library order, which is the order iOS happens to
-    /// return and is not meaningful to look at.
-    private var sorted: [Track] {
-        app.tracks.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-    }
-
     var body: some View {
         LibraryPageFrame(title: "deck://songs", count: app.tracks.count) {
-            let songs = sorted
+            // Sorted by title rather than in library order, which is whatever order iOS
+            // happens to return. Computed once at load, not here — see `sortedTracks`.
+            let songs = app.sortedTracks
             BareList {
                 ForEach(Array(songs.enumerated()), id: \.element.id) { offset, track in
                     TrackRow(
@@ -344,32 +354,38 @@ struct ArtistDetail: View {
     let artist: String
     @EnvironmentObject var app: MobileState
 
-    private let columns = [
-        GridItem(.flexible(), spacing: 10),
-        GridItem(.flexible(), spacing: 10),
-    ]
-
     var body: some View {
         DetailScaffold(title: "deck://artist") {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(artist)
-                        .font(DeckFont.mono(17, weight: .semibold))
-                        .foregroundStyle(app.theme.fg)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 14)
+            // Same single-measurement approach as AlbumsPage.
+            GeometryReader { geo in
+                let cell = max(80, (geo.size.width - 24 - 10) / 2)
 
-                    LazyVGrid(columns: columns, spacing: 14) {
-                        ForEach(app.albums(byArtist: artist)) { album in
-                            NavigationLink(value: NavigationTarget.album(album.key)) {
-                                AlbumCell(album: album)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        Text(artist)
+                            .font(DeckFont.mono(17, weight: .semibold))
+                            .foregroundStyle(app.theme.fg)
+                            .padding(.horizontal, 12)
+                            .padding(.top, 14)
+
+                        LazyVGrid(
+                            columns: [
+                                GridItem(.fixed(cell), spacing: 10),
+                                GridItem(.fixed(cell), spacing: 10),
+                            ],
+                            spacing: 16
+                        ) {
+                            ForEach(app.albums(byArtist: artist)) { album in
+                                NavigationLink(value: NavigationTarget.album(album.key)) {
+                                    AlbumCell(album: album, width: cell)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
+                        .padding(.horizontal, 12)
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.bottom, 90)
                 }
-                .padding(.bottom, 90)
             }
         }
     }

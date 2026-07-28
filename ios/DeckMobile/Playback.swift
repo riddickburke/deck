@@ -97,7 +97,11 @@ final class Playback: ObservableObject {
     func play(tracks: [Track], startingAt startIndex: Int = 0) {
         guard !tracks.isEmpty else { return }
         let items = MusicLibrary.items(forIDs: tracks.compactMap(\.externalID))
-        guard !items.isEmpty else { return }
+        Log.playback.notice("play: \(tracks.count) tracks, \(items.count) resolved to items")
+        guard !items.isEmpty else {
+            Log.playback.error("play: nothing resolved, aborting")
+            return
+        }
 
         // Resolution can drop tracks the library no longer has, so the requested index
         // is remapped onto what actually resolved rather than used directly.
@@ -125,7 +129,10 @@ final class Playback: ObservableObject {
             Task { @MainActor in
                 guard let self else { return }
                 self.isLoadingQueue = false
-                if error == nil {
+                if let error {
+                    Log.playback.error("prepareToPlay failed: \(error.localizedDescription)")
+                } else {
+                    Log.playback.notice("prepareToPlay ok, starting")
                     if let item = MusicLibrary.item(forID: startID) {
                         self.player.nowPlayingItem = item
                     }

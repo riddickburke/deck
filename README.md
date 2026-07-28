@@ -146,8 +146,8 @@ The desktop build is driven by keys; this one is driven by the hand.
 | Gesture | Does |
 |---|---|
 | Swipe left / right anywhere in the library | Move between albums, artists, songs, playlists |
-| Drag the mini player up, or tap it | Open now playing, following your finger |
-| Drag now playing down | Dismiss it |
+| Swipe the mini player up, or tap it | Open the full-screen now playing |
+| Swipe now playing down | Dismiss it |
 | Swipe across the mini player | Previous / next track |
 | Swipe across the big artwork | Previous / next track |
 | Swipe a row right | Play next |
@@ -182,6 +182,33 @@ script. `build.sh` does this for you.
 On first launch iOS asks for access to your media library. Deck shows nothing until you
 allow it; if you refuse and change your mind, it is under Settings › Privacy & Security ›
 Media & Apple Music.
+
+### Diagnosing it on the phone
+
+The media library only exists on real hardware — a simulator returns an empty
+`MPMediaQuery` no matter what — and there is no way to drive the UI from a script. So the
+app writes a diagnostics file recording what the library, artwork and playback paths
+actually did. Counts and outcomes only; never a title, artist or path.
+
+```bash
+# what happened this session
+xcrun devicectl device copy from --device <udid> \
+    --domain-type appDataContainer \
+    --domain-identifier com.riddickburke.deckmobile \
+    --source Documents/deck-diagnostics.txt --destination ./diag.txt
+
+# also exercise artwork and playback on launch, without tapping anything
+xcrun devicectl device process launch --device <udid> \
+    --environment-variables '{"DECK_SELFTEST":"1"}' com.riddickburke.deckmobile
+```
+
+Note that the device must be **unlocked**. A launch onto a locked phone reports success,
+but the app stays suspended and never renders, so nothing is logged and it looks as
+though the app did nothing.
+
+This is how the first round of bugs was found: the log showed the library and playback
+working perfectly while the album grid had rendered exactly one cell, which pointed at
+layout rather than Apple Music.
 
 ### Signing with a free Apple ID
 

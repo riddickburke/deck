@@ -123,7 +123,11 @@ struct Artwork: View {
     }
 
     private func load() async {
-        guard let trackID else { image = nil; return }
+        guard let trackID else {
+            ArtworkProbe.record(.nilID, size: size)
+            image = nil
+            return
+        }
         if let cached = ArtworkCache.shared.image(for: trackID, size: size) {
             image = cached
             return
@@ -133,8 +137,12 @@ struct Artwork: View {
             MusicLibrary.artwork(forID: trackID, size: pixels)
         }.value
 
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+            ArtworkProbe.record(.cancelled, size: size)
+            return
+        }
         if let loaded { ArtworkCache.shared.store(loaded, for: trackID, size: size) }
+        ArtworkProbe.record(loaded == nil ? .nilImage : .loaded, size: size)
         image = loaded
     }
 }
