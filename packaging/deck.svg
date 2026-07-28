@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Drawn to match the macOS icon: a terminal window with a spectrum inside.
+     Scalable so no raster assets live in the repo. Tokyo Night palette. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#1a1b2e"/>
+
+  <!-- Window body: square corners, 1px-equivalent hairline border. -->
+  <rect x="31" y="31" width="450" height="450" fill="#1a1b2e" stroke="#565f89"
+        stroke-opacity="0.6" stroke-width="4"/>
+
+  <!-- Titlebar strip with three dots. -->
+  <rect x="31" y="31" width="450" height="72" fill="#16172a"/>
+  <circle cx="72" cy="67" r="12" fill="#f7768e"/>
+  <circle cx="110" cy="67" r="12" fill="#e0af68"/>
+  <circle cx="148" cy="67" r="12" fill="#9ece6a"/>
+
+  <!-- Spectrum bars, the app's signature element. -->
+  <g>
+    <rect x="94"  y="317" width="34" height="70"  fill="#7aa2f7"/>
+    <rect x="139" y="269" width="34" height="118" fill="#7aa2f7"/>
+    <rect x="184" y="222" width="34" height="165" fill="#e0af68"/>
+    <rect x="229" y="291" width="34" height="96"  fill="#7aa2f7"/>
+    <rect x="274" y="199" width="34" height="188" fill="#f7768e"/>
+    <rect x="319" y="257" width="34" height="130" fill="#e0af68"/>
+    <rect x="364" y="330" width="34" height="57"  fill="#7aa2f7"/>
+  </g>
+</svg>

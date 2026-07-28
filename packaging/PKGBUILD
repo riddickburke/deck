@@ -1,0 +1,46 @@
+# Maintainer: Riddick Burke <riddickburke7@gmail.com>
+#
+# Builds deck from source. Arch ships a current Swift toolchain, so building
+# locally is straightforward and produces a binary matched to the system.
+#
+# For a prebuilt binary instead, see deck-bin in the release assets.
+
+pkgname=deck
+pkgver=1.3.0
+pkgrel=1
+pkgdesc="Music player and Rockbox sync tool with a terminal aesthetic"
+arch=('x86_64' 'aarch64')
+url="https://github.com/riddickburke/deck"
+license=('MIT')
+depends=('gtk4' 'glib2' 'curl' 'libxml2')
+optdepends=(
+  'ffmpeg: reading tags and artwork, and FLAC to MP3 conversion'
+  'mpv: audio playback'
+)
+makedepends=('swift-bin' 'pkgconf')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/$pkgname-$pkgver"
+  # Static stdlib so the package does not depend on a Swift toolchain at runtime.
+  swift build -c release --product deck --static-swift-stdlib
+}
+
+check() {
+  cd "$srcdir/$pkgname-$pkgver"
+  swift run -c release DeckTests
+}
+
+package() {
+  cd "$srcdir/$pkgname-$pkgver"
+
+  install -Dm755 "$(swift build -c release --show-bin-path)/deck" \
+    "$pkgdir/usr/bin/deck"
+  install -Dm644 packaging/deck.desktop \
+    "$pkgdir/usr/share/applications/deck.desktop"
+  install -Dm644 packaging/deck.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/deck.svg"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

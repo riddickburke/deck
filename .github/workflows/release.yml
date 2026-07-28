@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and attach artifacts to'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # Built on the oldest supported Ubuntu so the glibc requirement stays low:
+  # a binary linked against 22.04's glibc runs on 24.04, but not the reverse.
+  linux-deb:
+    name: deb (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    container: swift:6.0-jammy
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            pkg-config libgtk-4-dev binutils dpkg-dev
+
+      - name: Build and package
+        run: |
+          chmod +x packaging/build-linux.sh packaging/install.sh
+          ./packaging/build-linux.sh --deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.arch }}
+          path: |
+            dist/*.deb
+            dist/*.tar.gz
+
+  linux-rpm:
+    name: rpm (x86_64)
+    runs-on: ubuntu-latest
+    container: fedora:40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Swift and build dependencies
+        run: |
+          dnf install -y -q \
+            swift-lang gtk4-devel pkgconf-pkg-config rpm-build \
+            binutils tar gzip findutils || {
+            echo "swift-lang unavailable; falling back to the official tarball"
+            dnf install -y -q gtk4-devel pkgconf-pkg-config rpm-build binutils tar gzip findutils \
+              libcurl-devel libxml2-devel
+            exit 1
+          }
+
+      - name: Build and package
+        run: |
+          chmod +x packaging/build-linux.sh packaging/install.sh
+          ./packaging/build-linux.sh --rpm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm-x86_64
+          path: dist/*.rpm
+
+  publish:
+    name: publish
+    needs: [linux-deb, linux-rpm]
+    # The rpm job depends on Fedora shipping swift-lang, which is not guaranteed;
+    # a missing rpm should not block the release of everything else.
+    if: always() && needs.linux-deb.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' \) \
+            -exec cp {} release/ \;
+          cd release && sha256sum * > SHA256SUMS
+          ls -la
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"

@@ -24,7 +24,44 @@ pushes selected playlists onto a Rockbox player over USB.
 └───────────────────────────────────────────────────────────────┘
 ```
 
-## Install
+Runs on **macOS 14+** (SwiftUI) and **Linux** (GTK4). Both front ends are built on the
+same core, so library indexing, metadata repair, artwork resolution and Rockbox syncing
+behave identically on either platform.
+
+## Install — Linux
+
+Download from [Releases](../../releases/latest).
+
+**Debian, Ubuntu, Mint, Pop!_OS**
+```bash
+sudo apt install ./deck_1.3.0_amd64.deb
+sudo apt install ffmpeg mpv          # required at runtime
+```
+
+**Fedora, RHEL, openSUSE**
+```bash
+sudo dnf install ./deck-1.3.0-1.x86_64.rpm
+sudo dnf install ffmpeg mpv
+```
+
+**Arch, Manjaro, EndeavourOS**
+```bash
+# from the AUR-style PKGBUILD in packaging/
+makepkg -si
+sudo pacman -S ffmpeg mpv
+```
+
+**Anything else** — the generic tarball works on any glibc distribution:
+```bash
+tar xzf deck-1.3.0-linux-x86_64.tar.gz
+sudo ./install.sh            # or ./install.sh --user for ~/.local
+```
+
+The binary is built with a static Swift runtime, so **no Swift toolchain is needed** to
+run it. The only requirements are GTK 4.6+, glibc, plus `ffmpeg` (tags, artwork,
+conversion) and `mpv` (playback).
+
+## Install — macOS
 
 Download the DMG from [Releases](../../releases/latest), then:
 
@@ -54,8 +91,8 @@ binary — Apple Silicon and Intel.
 
 ## Build from source
 
-Needs only the Swift toolchain. **Full Xcode is not required** — Command Line Tools is
-enough.
+**macOS** — needs only the Swift toolchain. Full Xcode is not required; Command Line
+Tools is enough.
 
 ```bash
 ./build.sh release run      # build, bundle, and launch
@@ -64,6 +101,27 @@ enough.
 swift run DeckTests         # run the test suite
 .build/release/deck --scan  # index the library from the console and print a summary
 ```
+
+**Linux** — needs Swift 5.9+, GTK 4.6+ and pkg-config.
+
+```bash
+# debian/ubuntu
+sudo apt install libgtk-4-dev pkg-config ffmpeg mpv
+# fedora
+sudo dnf install gtk4-devel pkgconf-pkg-config ffmpeg mpv
+# arch
+sudo pacman -S gtk4 pkgconf ffmpeg mpv
+
+swift build -c release --product deck --static-swift-stdlib
+swift run DeckTests
+
+./packaging/build-linux.sh            # tarball
+./packaging/build-linux.sh --deb      # also a .deb
+./packaging/build-linux.sh --rpm      # also an .rpm
+```
+
+`--static-swift-stdlib` matters: without it the binary needs a Swift runtime installed,
+which no distribution ships.
 
 ## Design
 
@@ -191,21 +249,46 @@ files appear in its database browser.
 
 ```
 Sources/
-  DeckCore/          UI-independent core
+  DeckCore/          portable — Foundation only, no UI framework
     Models          Track, Album, Playlist
     LibraryScanner  walk + cached index
-    MetadataReader  ffprobe primary, AVAsset fallback
-    ArtworkStore    embedded → folder → online, disk cached
+    MetadataReader  ffprobe primary, AVAsset fallback on Apple
+    ArtworkStore    embedded → folder → online, disk cached, Data-based
+    ImageOps        resize + dominant colour via ffmpeg
     OnlineMetadata  MusicBrainz, Cover Art Archive, iTunes
-    Player          AVAudioEngine, EQ, gapless, FFT, opus decode
-    RockboxDevice   volume detection
+    Spectrum        FFT band folding shared by both visualisers
+    Player          AVAudioEngine, EQ, gapless      (Apple only)
+    MPVPlayer       mpv JSON IPC                    (Linux only)
+    RockboxDevice   volume detection, per platform
     Transcoder      FLAC → MP3, cached, non-destructive
     SyncEngine      plan, diff, copy, m3u8, manifest
     Shell           async Process wrapper
-    Theme           colour roles + 15 palettes
-  Deck/              SwiftUI app
+    Theme           15 palettes as portable RGB, SwiftUI Colors layered on
+    StableHash      process-stable cache keys, replaces CryptoKit
+  Deck/              SwiftUI app                    (macOS)
+  DeckGTK/           GTK4 app                       (Linux)
+  CGtk4/             C inline shim over GTK4
   DeckTests/         test suite (executable — see below)
 ```
+
+`Package.swift` selects targets by host platform, so Linux never sees the SwiftUI app and
+macOS never sees GTK.
+
+### Notes on the GTK layer
+
+Three things about GTK from Swift are worth knowing if you touch `Sources/CGtk4`:
+
+- **The casting macros are macros.** `GTK_BOX`, `GTK_WINDOW` and friends cannot be called
+  from Swift, and whether Swift implicitly converts a `GtkWidget*` to a `GtkBox*` depends
+  on which instance structs the installed GTK exposes. Every wrapper therefore takes
+  `void *` and casts in C, where it is always valid — Swift sees one concrete type.
+- **`g_signal_connect` is a macro too**, and `g_signal_connect_data` takes a
+  `GConnectFlags` whose Swift import differs across glib versions (`G_CONNECT_DEFAULT`
+  only exists from 2.74). The shim does that cast in C.
+- **Signal callback arity must match.** A three-argument signal passes user data in the
+  third slot, so registering a two-argument callback would read the signal's own argument
+  as the closure pointer and crash. `onSignal` and `onSignalWithArgument` are separate
+  for that reason.
 
 The test suite is a plain executable rather than a `.testTarget`. XCTest and swift-testing
 both ship only with full Xcode, and this project deliberately builds with Command Line

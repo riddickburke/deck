@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Deck
+GenericName=Music Player
+Comment=Music player and Rockbox sync tool
+Exec=deck
+TryExec=deck
+Icon=deck
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=music;audio;player;rockbox;ipod;flac;sync;
+StartupNotify=true

@@ -14,10 +14,16 @@ private final class SignalBox {
 }
 
 /// Frees the boxed closure when GTK disposes the connection.
-private let releaseBox: @convention(c) (UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void = { data, _ in
+///
+/// Bitcast to GClosureNotify rather than declared as it: the second parameter is a
+/// GClosure pointer whose Swift import depends on whether the installed glib exposes
+/// the struct, and this signature is ABI-identical either way.
+private let releaseBoxImpl: @convention(c) (UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void = { data, _ in
     guard let data else { return }
     Unmanaged<SignalBox>.fromOpaque(data).release()
 }
+
+private let releaseBox = unsafeBitCast(releaseBoxImpl, to: GClosureNotify.self)
 
 /// Handler for signals whose C signature is `(instance, user_data)` — "clicked",
 /// "activate", "destroy", "value-changed".

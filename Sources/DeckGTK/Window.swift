@@ -100,6 +100,15 @@ final class Window {
         let list = GTK.list()
         sidebarList = list
         panel.append(GTK.scrolled(list))
+
+        // Connected once at construction. Doing it in refreshSidebar would attach a new
+        // handler on every redraw, so one click would fire dozens of times.
+        onSignalWithArgument(list, "row-activated") { [weak self] row in
+            guard let self, let row else { return }
+            let index = Int(deck_listbox_row_index(row))
+            guard self.sidebarActions.indices.contains(index) else { return }
+            self.sidebarActions[index]()
+        }
         return panel
     }
 
@@ -239,12 +248,6 @@ final class Window {
         }
 
         sidebarActions = actions
-        onSignalWithArgument(list, "row-activated") { [weak self] row in
-            guard let self, let row else { return }
-            let index = Int(deck_listbox_row_index(row))
-            guard self.sidebarActions.indices.contains(index) else { return }
-            self.sidebarActions[index]()
-        }
     }
 
     private var sidebarActions: [() -> Void] = []
