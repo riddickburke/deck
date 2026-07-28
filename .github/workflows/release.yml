@@ -49,28 +49,30 @@ jobs:
             dist/*.deb
             dist/*.tar.gz
 
+  # Built in the Swift container rather than a Fedora one: Fedora does not reliably
+  # ship swift-lang, whereas rpmbuild is packaged for Debian as `rpm`. The output is
+  # identical either way — an rpm is metadata plus a cpio archive, and the automatic
+  # dependency scan reads sonames from the ELF binary, which match on Fedora.
   linux-rpm:
     name: rpm (x86_64)
     runs-on: ubuntu-latest
-    container: fedora:40
+    container: swift:6.0-jammy
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Swift and build dependencies
+      - name: Install build dependencies
         run: |
-          dnf install -y -q \
-            swift-lang gtk4-devel pkgconf-pkg-config rpm-build \
-            binutils tar gzip findutils || {
-            echo "swift-lang unavailable; falling back to the official tarball"
-            dnf install -y -q gtk4-devel pkgconf-pkg-config rpm-build binutils tar gzip findutils \
-              libcurl-devel libxml2-devel
-            exit 1
-          }
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            --no-install-recommends pkg-config libgtk-4-dev binutils rpm
 
       - name: Build and package
         run: |
           chmod +x packaging/build-linux.sh packaging/install.sh
           ./packaging/build-linux.sh --rpm
+
+      - name: Show package metadata
+        run: rpm -qip dist/*.rpm && rpm -qlp dist/*.rpm
 
       - uses: actions/upload-artifact@v4
         with:
