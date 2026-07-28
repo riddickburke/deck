@@ -7,8 +7,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  # The portable half of the codebase. ffmpeg is installed because several tests
+  # Portable core plus the test suite. ffmpeg is needed because several tests
   # generate real audio files and probe them back.
+  #
+  # --no-install-recommends matters here: the full recommends set for ffmpeg and
+  # libgtk-4-dev pulls in hundreds of packages (docs, X11 extras, sample data) and
+  # dominates the job's runtime.
   core:
     name: core · ${{ matrix.name }}
     runs-on: ubuntu-latest
@@ -29,6 +33,7 @@ jobs:
         run: |
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            --no-install-recommends \
             ffmpeg pkg-config libgtk-4-dev
 
       - name: Build DeckCore
@@ -39,6 +44,20 @@ jobs:
 
       - name: Build GTK front end
         run: swift build --product deck -c release
+
+      # Proves the shipped binary needs no Swift toolchain at runtime, which is
+      # the whole premise of the Linux packages.
+      - name: Verify static build has no Swift runtime dependency
+        run: |
+          swift build --product deck -c release --static-swift-stdlib
+          BIN="$(swift build -c release --show-bin-path)/deck"
+          echo "--- linked libraries ---"
+          ldd "$BIN"
+          if ldd "$BIN" | grep -qi 'libswift\|libFoundation'; then
+            echo "::error::binary still links the Swift runtime dynamically"
+            exit 1
+          fi
+          echo "ok: no Swift runtime dependency"
 
   macos:
     name: macos
