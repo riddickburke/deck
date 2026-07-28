@@ -39,9 +39,16 @@ public actor OnlineMetadata {
     public init() {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 15
+        // The URL-taking initialiser is Darwin-only; swift-corelibs-foundation still
+        // has the older diskPath form.
+        let httpCache = Config.cacheDirectory.appendingPathComponent("http")
+        #if canImport(Darwin)
         config.urlCache = URLCache(
-            memoryCapacity: 8 << 20, diskCapacity: 128 << 20,
-            directory: Config.cacheDirectory.appendingPathComponent("http"))
+            memoryCapacity: 8 << 20, diskCapacity: 128 << 20, directory: httpCache)
+        #else
+        config.urlCache = URLCache(
+            memoryCapacity: 8 << 20, diskCapacity: 128 << 20, diskPath: httpCache.path)
+        #endif
         // Use the cache when we have it, but always allow a live request.
         config.requestCachePolicy = .useProtocolCachePolicy
         session = URLSession(configuration: config)
