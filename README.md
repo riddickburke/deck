@@ -7,8 +7,8 @@ Local library playback with real album art and metadata repair, plus a sync engi
 pushes selected playlists onto a Rockbox player over USB.
 
 ```
-┌─│ nebula://deck ─────────────────────────────── device: IPOD ─┐
-│ nebula://library │ nebula://albums                            │
+┌─│ deck ───────────────────────────────────────── device: IPOD ─┐
+│ deck://library   │ deck://albums                              │
 │  › albums    161 │  ┌────────┐ ┌────────┐ ┌────────┐          │
 │    artists    67 │  │  art   │ │  art   │ │  art   │          │
 │    songs    2758 │  └────────┘ └────────┘ └────────┘          │
@@ -84,6 +84,24 @@ transport, format details, and what's up next.
 **15 themes**, switchable live with `t` or from the command palette:
 `dark` (default), graphite, midnight, one dark, tokyo night, catppuccin mocha, rosé pine,
 nord, gruvbox, everforest, solarized dark, dracula, monokai, amber crt, phosphor.
+
+## System media controls
+
+Deck registers as the system Now Playing app, so it works with the rest of macOS rather
+than only inside its own window:
+
+- **Media keys** — F7/F8/F9 (or the Touch Bar / function row) for previous, play-pause and
+  next, even when Deck is in the background.
+- **Control Centre and the menu bar** — the Now Playing tile shows the current track,
+  artist, album and cover art, and its transport and scrub bar drive playback.
+- **Bluetooth and headset controls** — play/pause and track skip from AirPods, headphones
+  and car stereos.
+- **Lock screen / notification centre** — current track with artwork.
+
+Both halves are required for this and it is a common thing to get half-right: registering
+remote commands alone does nothing, because macOS only routes media keys to an app that
+has populated `MPNowPlayingInfoCenter`. Deck sets both, and clears them on quit so the
+tile does not linger showing a track nothing is playing.
 
 ## Keys
 
@@ -204,13 +222,18 @@ never drain, children block writing to full pipes, and nothing exits. Completion
 
 | path | contents |
 |---|---|
-| `~/Library/Application Support/com.nebula.deck/config.json` | settings |
-| `~/Library/Application Support/com.nebula.deck/index.json` | library index |
-| `~/Library/Application Support/com.nebula.deck/playlists.json` | playlists |
-| `~/Library/Caches/com.nebula.deck/` | artwork, converted MP3s, decoded audio |
+| `~/Library/Application Support/com.riddickburke.deck/config.json` | settings |
+| `~/Library/Application Support/com.riddickburke.deck/index.json` | library index |
+| `~/Library/Application Support/com.riddickburke.deck/playlists.json` | playlists |
+| `~/Library/Caches/com.riddickburke.deck/` | artwork, converted MP3s, decoded audio |
 | `<device>/.deck-sync.json` | sync manifest |
 
 Nothing is ever written into your music library unless you explicitly ask for a conversion.
+
+Deck was previously identified as `com.nebula.deck`. On first launch after upgrading, data
+under the old identifier is moved across once — settings, library index and playlists all
+carry over. The migration never overwrites data already present under the new identifier,
+and is a no-op on a fresh install.
 
 ## Licence
 

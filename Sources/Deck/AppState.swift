@@ -91,8 +91,13 @@ final class AppState: ObservableObject {
     private let scanner = LibraryScanner()
     private let syncEngine = SyncEngine()
     private var deviceTimer: Timer?
+    private(set) var mediaRemote: MediaRemote!
 
     init() {
+        // Must run before anything touches the support directories, since the app's
+        // identifier changed and the old location holds the existing index and playlists.
+        Config.migrateLegacyDataIfNeeded()
+
         let loaded = Config.load()
         config = loaded
         theme = Theme.named(loaded.themeID)
@@ -105,6 +110,15 @@ final class AppState: ObservableObject {
         player.volume = loaded.volume
         player.shuffle = loaded.shuffle
         player.repeatMode = loaded.repeatMode
+
+        // System media keys and the Control Centre tile.
+        mediaRemote = MediaRemote(player: player)
+        mediaRemote.artworkProvider = { [weak self] track in
+            guard let self else { return nil }
+            guard let album = await MainActor.run(body: { self.album(for: track.albumKey) })
+            else { return nil }
+            return await ArtworkStore.shared.artwork(for: album)
+        }
 
         refreshDevices()
         // Volumes appear and disappear without notice; polling is simpler and cheap

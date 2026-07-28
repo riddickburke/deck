@@ -14,7 +14,7 @@ struct RootView: View {
 
             VStack(spacing: 0) {
                 TUITitlebar(
-                    title: "nebula://deck",
+                    title: "deck",
                     focused: true,
                     trailing: app.selectedDevice.map { "device: \($0.volumeName)" } ?? "no device")
 
@@ -95,15 +95,15 @@ struct RootView: View {
 
     private var panelTitle: String {
         switch app.route {
-        case .albums: return "nebula://albums"
-        case .artists: return "nebula://artists"
-        case .songs: return "nebula://songs"
-        case .album(let key): return "nebula://albums/\(key.album)"
-        case .artist(let name): return "nebula://artists/\(name)"
-        case .playlist(let id): return "nebula://playlists/\(app.playlist(id)?.name ?? "")"
-        case .queue: return "nebula://queue"
-        case .sync: return "nebula://sync"
-        case .settings: return "nebula://settings"
+        case .albums: return "deck://albums"
+        case .artists: return "deck://artists"
+        case .songs: return "deck://songs"
+        case .album(let key): return "deck://albums/\(key.album)"
+        case .artist(let name): return "deck://artists/\(name)"
+        case .playlist(let id): return "deck://playlists/\(app.playlist(id)?.name ?? "")"
+        case .queue: return "deck://queue"
+        case .sync: return "deck://sync"
+        case .settings: return "deck://settings"
         }
     }
 

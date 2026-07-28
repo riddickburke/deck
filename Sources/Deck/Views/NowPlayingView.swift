@@ -71,7 +71,7 @@ struct NowPlayingView: View {
             Rectangle()
                 .fill(app.theme.accent)
                 .frame(width: 2, height: 11)
-            Text("nebula://now-playing")
+            Text("deck://now-playing")
                 .font(DeckFont.mono(11))
                 .foregroundStyle(app.theme.fg)
             Spacer()

@@ -268,6 +268,98 @@ await T.test("only files we recorded can be orphaned") {
     T.expect(!orphans.contains(theirs), "a file we never wrote must not be deletable")
 }
 
+// MARK: - Identifier migration
+
+T.suite("Legacy data migration")
+
+/// Builds a fake Library base containing `<base>/<bundleID>/<files>`.
+func seedSupportDir(_ base: URL, bundle: String, files: [String: String]) throws {
+    let dir = base.appendingPathComponent(bundle, isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    for (name, contents) in files {
+        try Data(contents.utf8).write(to: dir.appendingPathComponent(name))
+    }
+}
+
+func readSupportFile(_ base: URL, bundle: String, _ name: String) -> String? {
+    try? String(
+        contentsOf: base.appendingPathComponent(bundle).appendingPathComponent(name),
+        encoding: .utf8)
+}
+
+await T.test("moves settings and index across when the new location is absent") {
+    let base = try Fixture.tempDirectory("migrate-fresh")
+    defer { Fixture.remove(base) }
+
+    try seedSupportDir(base, bundle: "old.id", files: [
+        "config.json": "{\"themeID\":\"nord\"}",
+        "index.json": "[1,2,3]",
+        "playlists.json": "[]",
+    ])
+
+    Config.migrate(bases: [base], from: "old.id", to: "new.id")
+
+    T.equal(readSupportFile(base, bundle: "new.id", "config.json"), "{\"themeID\":\"nord\"}")
+    T.equal(readSupportFile(base, bundle: "new.id", "index.json"), "[1,2,3]")
+    T.expect(
+        !FileManager.default.fileExists(
+            atPath: base.appendingPathComponent("old.id").path),
+        "old directory should be gone after the move")
+}
+
+await T.test("merges into a directory that exists but is empty") {
+    // `appSupportDirectory` creates the new folder as a side effect of reading a path,
+    // so the destination frequently exists and is empty by the time migration runs.
+    let base = try Fixture.tempDirectory("migrate-empty-dest")
+    defer { Fixture.remove(base) }
+
+    try seedSupportDir(base, bundle: "old.id", files: ["config.json": "kept"])
+    try FileManager.default.createDirectory(
+        at: base.appendingPathComponent("new.id"), withIntermediateDirectories: true)
+
+    Config.migrate(bases: [base], from: "old.id", to: "new.id")
+
+    T.equal(readSupportFile(base, bundle: "new.id", "config.json"), "kept")
+    T.expect(
+        !FileManager.default.fileExists(atPath: base.appendingPathComponent("old.id").path),
+        "old directory should be removed after merging")
+}
+
+await T.test("never clobbers data already under the new identifier") {
+    let base = try Fixture.tempDirectory("migrate-conflict")
+    defer { Fixture.remove(base) }
+
+    try seedSupportDir(base, bundle: "old.id", files: ["config.json": "OLD"])
+    try seedSupportDir(base, bundle: "new.id", files: ["config.json": "NEW"])
+
+    Config.migrate(bases: [base], from: "old.id", to: "new.id")
+
+    T.equal(readSupportFile(base, bundle: "new.id", "config.json"), "NEW", "existing data wins")
+    T.equal(readSupportFile(base, bundle: "old.id", "config.json"), "OLD", "old data left intact")
+}
+
+await T.test("is a no-op when there is nothing to migrate") {
+    let base = try Fixture.tempDirectory("migrate-none")
+    defer { Fixture.remove(base) }
+
+    Config.migrate(bases: [base], from: "old.id", to: "new.id")
+
+    T.expect(
+        !FileManager.default.fileExists(atPath: base.appendingPathComponent("new.id").path),
+        "should not create a destination when there is no source")
+}
+
+await T.test("running twice is safe") {
+    let base = try Fixture.tempDirectory("migrate-twice")
+    defer { Fixture.remove(base) }
+
+    try seedSupportDir(base, bundle: "old.id", files: ["config.json": "once"])
+    Config.migrate(bases: [base], from: "old.id", to: "new.id")
+    Config.migrate(bases: [base], from: "old.id", to: "new.id")
+
+    T.equal(readSupportFile(base, bundle: "new.id", "config.json"), "once")
+}
+
 // MARK: - Artwork discovery
 
 T.suite("Folder artwork discovery")

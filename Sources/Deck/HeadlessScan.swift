@@ -7,6 +7,7 @@ enum HeadlessScan {
     static func run() -> Never {
         // Line-buffer, otherwise nothing appears until exit when stdout is a pipe.
         setvbuf(stdout, nil, _IOLBF, 0)
+        Config.migrateLegacyDataIfNeeded()
         let config = Config.load()
 
         print("deck — library scan")

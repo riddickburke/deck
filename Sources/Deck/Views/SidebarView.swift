@@ -7,7 +7,7 @@ struct SidebarView: View {
     @State private var creatingPlaylist = false
 
     var body: some View {
-        TUIPanel(title: "nebula://library", focused: app.focusedPane == .sidebar) {
+        TUIPanel(title: "deck://library", focused: app.focusedPane == .sidebar) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
                     group("browse") {

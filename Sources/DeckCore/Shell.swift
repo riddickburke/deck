@@ -49,7 +49,7 @@ public enum Shell {
 
     /// Pipe draining happens here rather than on the cooperative pool.
     private static let ioQueue = DispatchQueue(
-        label: "com.nebula.deck.shell.io", qos: .userInitiated, attributes: .concurrent)
+        label: "com.riddickburke.deck.shell.io", qos: .userInitiated, attributes: .concurrent)
 
     public static func which(_ tool: String) -> URL? {
         cacheLock.lock()

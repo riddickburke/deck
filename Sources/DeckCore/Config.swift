@@ -47,7 +47,54 @@ public struct Config: Codable, Equatable, Sendable {
 
     // MARK: - Paths
 
-    public static let bundleID = "com.nebula.deck"
+    public static let bundleID = "com.riddickburke.deck"
+
+    /// The identifier used before the app dropped its original branding. Data written
+    /// under it is moved across once, so an existing library index, playlists and
+    /// settings survive the rename instead of silently resetting.
+    static let legacyBundleID = "com.nebula.deck"
+
+    /// Moves `~/Library/Application Support` and `~/Library/Caches` data from the old
+    /// identifier. Runs at most once: it only acts when the old directory exists and the
+    /// new one has not been populated yet, so it can be called on every launch.
+    public static func migrateLegacyDataIfNeeded() {
+        let fm = FileManager.default
+        let bases: [URL] = [.applicationSupportDirectory, .cachesDirectory]
+            .compactMap { fm.urls(for: $0, in: .userDomainMask).first }
+        migrate(bases: bases, from: legacyBundleID, to: bundleID)
+    }
+
+    /// Split out from the caller so it can be exercised against temporary directories
+    /// rather than the real Library. Safe to call repeatedly: it never overwrites data
+    /// already present under the new identifier.
+    public static func migrate(bases: [URL], from legacy: String, to current: String) {
+        let fm = FileManager.default
+
+        for base in bases {
+            let old = base.appendingPathComponent(legacy, isDirectory: true)
+            let new = base.appendingPathComponent(current, isDirectory: true)
+
+            guard fm.fileExists(atPath: old.path) else { continue }
+
+            // Never clobber a newer install's data.
+            let existing = (try? fm.contentsOfDirectory(atPath: new.path)) ?? []
+            guard existing.isEmpty else { continue }
+
+            // Move the whole directory when the destination is absent, otherwise merge
+            // entry by entry — an empty directory auto-created by `appSupportDirectory`
+            // would otherwise block the move.
+            if !fm.fileExists(atPath: new.path) {
+                try? fm.moveItem(at: old, to: new)
+            } else {
+                for name in (try? fm.contentsOfDirectory(atPath: old.path)) ?? [] {
+                    try? fm.moveItem(
+                        at: old.appendingPathComponent(name),
+                        to: new.appendingPathComponent(name))
+                }
+                try? fm.removeItem(at: old)
+            }
+        }
+    }
 
     public static var appSupportDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
