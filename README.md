@@ -25,8 +25,29 @@ pushes selected playlists onto a Rockbox player over USB.
 ```
 
 Runs on **macOS 14+** (SwiftUI) and **Linux** (GTK4). Both front ends are built on the
-same core, so library indexing, metadata repair, artwork resolution and Rockbox syncing
-behave identically on either platform.
+same core, so library indexing, tag reading, artwork resolution, transcoding and Rockbox
+syncing behave identically on either platform.
+
+The user interfaces are not at parity. SwiftUI does not exist on Linux, so the GTK build
+is a separate front end rather than a port, and it currently covers less:
+
+| | macOS | Linux |
+|---|---|---|
+| Library browse, album detail, queue | ✅ | ✅ |
+| Playback, seek, shuffle, repeat | ✅ AVAudioEngine | ✅ mpv |
+| Rockbox sync incl. dry run | ✅ | ✅ |
+| 15 themes | ✅ | ✅ |
+| Album art | ✅ | ✅ |
+| Gapless playback | ✅ | ✅ |
+| Full-screen now playing + spectrum | ✅ | ❌ |
+| 10-band EQ | ✅ | ❌ |
+| Search and command palette | ✅ | ❌ |
+| Convert to MP3 from the UI | ✅ | ❌ |
+| Metadata repair from the UI | ✅ | ❌ |
+| System media keys | ✅ | ❌ |
+
+The missing pieces are UI wiring, not missing capability — metadata repair and conversion
+live in the shared core and work on Linux via `deck --scan` and the sync path.
 
 ## Install — Linux
 
