@@ -18,9 +18,12 @@ private final class SignalBox {
 /// Bitcast to GClosureNotify rather than declared as it: the second parameter is a
 /// GClosure pointer whose Swift import depends on whether the installed glib exposes
 /// the struct, and this signature is ABI-identical either way.
+/// Released as AnyObject because the same notify serves both SignalBox and KeyBox.
+/// Releasing one as the other would be type-punning; refcounting does not care about
+/// the static type, but spelling it AnyObject makes that correct rather than lucky.
 private let releaseBoxImpl: @convention(c) (UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> Void = { data, _ in
     guard let data else { return }
-    Unmanaged<SignalBox>.fromOpaque(data).release()
+    Unmanaged<AnyObject>.fromOpaque(data).release()
 }
 
 private let releaseBox = unsafeBitCast(releaseBoxImpl, to: GClosureNotify.self)
@@ -115,10 +118,15 @@ private final class TickBox {
     init(_ action: @escaping () -> Bool) { self.action = action }
 }
 
+/// g_timeout_add and g_idle_add take no destroy notify, so the box has to be released
+/// here when the source stops. Without this every onMainThread call leaks — and that
+/// runs on every artwork load and every playback tick.
 private let tickCallback: @convention(c) (UnsafeMutableRawPointer?) -> gboolean = { data in
     guard let data else { return 0 }
-    let box = Unmanaged<TickBox>.fromOpaque(data).takeUnretainedValue()
-    return box.action() ? 1 : 0
+    let unmanaged = Unmanaged<TickBox>.fromOpaque(data)
+    let keepGoing = unmanaged.takeUnretainedValue().action()
+    if !keepGoing { unmanaged.release() }
+    return keepGoing ? 1 : 0
 }
 
 /// Repeating timer on the GTK main loop. The closure returns false to stop.

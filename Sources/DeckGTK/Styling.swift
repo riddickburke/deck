@@ -12,8 +12,13 @@ enum Styling {
 
     static func apply(_ theme: Theme) {
         if provider == nil {
-            provider = UnsafeMutableRawPointer(gtk_css_provider_new())
-            if let provider { deck_css_apply(provider) }
+            // gtk_css_provider_new is nullable in the imported header, and the pointer
+            // type depends on whether the installed GTK exposes the struct, so route
+            // it through the raw representation the rest of the layer uses.
+            guard let created = gtk_css_provider_new() else { return }
+            let raw = unsafeBitCast(created, to: UnsafeMutableRawPointer.self)
+            provider = raw
+            deck_css_apply(raw)
         }
         guard let provider else { return }
         deck_css_load(provider, css(for: theme))

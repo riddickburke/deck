@@ -96,19 +96,55 @@ public struct Config: Codable, Equatable, Sendable {
         }
     }
 
+    /// macOS uses the reverse-DNS identifier under Application Support, which is the
+    /// platform convention. Linux follows the XDG base directory spec instead, so
+    /// settings land in ~/.config/deck rather than an Apple-shaped path.
     public static var appSupportDirectory: URL {
+        #if os(macOS)
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent(bundleID, isDirectory: true)
+        #else
+        let dir = xdgDirectory(variable: "XDG_CONFIG_HOME", fallback: ".config")
+            .appendingPathComponent("deck", isDirectory: true)
+        #endif
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
 
     public static var cacheDirectory: URL {
+        #if os(macOS)
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let dir = base.appendingPathComponent(bundleID, isDirectory: true)
+        #else
+        let dir = xdgDirectory(variable: "XDG_CACHE_HOME", fallback: ".cache")
+            .appendingPathComponent("deck", isDirectory: true)
+        #endif
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
+
+    #if !os(macOS)
+    /// Honours the XDG variable when set to an absolute path, as the spec requires
+    /// relative values be ignored, and falls back to the conventional location.
+    static func xdgDirectory(variable: String, fallback: String) -> URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        if let value = ProcessInfo.processInfo.environment[variable],
+           value.hasPrefix("/") {
+            return URL(fileURLWithPath: value, isDirectory: true)
+        }
+        return home.appendingPathComponent(fallback, isDirectory: true)
+    }
+
+    /// The user's music folder, honouring XDG_MUSIC_DIR from user-dirs.dirs when set.
+    static func defaultMusicDirectory() -> URL {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        if let value = ProcessInfo.processInfo.environment["XDG_MUSIC_DIR"],
+           value.hasPrefix("/") {
+            return URL(fileURLWithPath: value, isDirectory: true)
+        }
+        return home.appendingPathComponent("Music", isDirectory: true)
+    }
+    #endif
 
     public static var configURL: URL {
         appSupportDirectory.appendingPathComponent("config.json")
@@ -126,7 +162,11 @@ public struct Config: Codable, Equatable, Sendable {
         else {
             var fresh = Config.default
             // Seed with the user's Music folder so first launch is not an empty screen.
+            #if os(macOS)
             let music = FileManager.default.urls(for: .musicDirectory, in: .userDomainMask).first
+            #else
+            let music: URL? = defaultMusicDirectory()
+            #endif
             if let music, FileManager.default.fileExists(atPath: music.path) {
                 fresh.libraryRoots = [music.path]
             }

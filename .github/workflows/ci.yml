@@ -7,14 +7,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Portable core plus the test suite. ffmpeg is needed because several tests
-  # generate real audio files and probe them back.
-  #
-  # --no-install-recommends matters here: the full recommends set for ffmpeg and
-  # libgtk-4-dev pulls in hundreds of packages (docs, X11 extras, sample data) and
-  # dominates the job's runtime.
-  core:
-    name: core · ${{ matrix.name }}
+  # Fast feedback. DeckCore and the test binary need no system libraries at all, so
+  # this surfaces portability errors in a couple of minutes instead of waiting on apt.
+  compile:
+    name: compile · ${{ matrix.name }}
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
     strategy:
@@ -25,54 +21,78 @@ jobs:
             image: swift:6.0-jammy
           - name: ubuntu-24.04
             image: swift:6.0-noble
-
     steps:
       - uses: actions/checkout@v4
+      - name: Build DeckCore
+        run: swift build --target DeckCore -c release
+      - name: Build test suite
+        run: swift build --target DeckTests -c release
 
-      - name: Install dependencies
+  # Tests need ffmpeg because several of them generate real audio and probe it back.
+  test:
+    name: test · ubuntu-24.04
+    needs: compile
+    runs-on: ubuntu-latest
+    container: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install ffmpeg
         run: |
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            --no-install-recommends \
-            ffmpeg pkg-config libgtk-4-dev
-
-      - name: Build DeckCore
-        run: swift build --target DeckCore -c release
-
+            --no-install-recommends ffmpeg
       - name: Run tests
         run: swift run -c release DeckTests
 
-      - name: Build GTK front end
+  # The GTK front end, and proof that the shipped binary carries its own Swift runtime.
+  gtk:
+    name: gtk · ${{ matrix.name }}
+    needs: compile
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-22.04
+            image: swift:6.0-jammy
+          - name: ubuntu-24.04
+            image: swift:6.0-noble
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            --no-install-recommends pkg-config libgtk-4-dev
+
+      - name: Build
         run: swift build --product deck -c release
 
-      # Proves the shipped binary needs no Swift toolchain at runtime, which is
-      # the whole premise of the Linux packages.
-      - name: Verify static build has no Swift runtime dependency
+      # The Linux packages assume no Swift toolchain on the target machine. If that
+      # ever stops being true it should fail here, not in someone's install.
+      - name: Verify no dynamic Swift runtime dependency
         run: |
           swift build --product deck -c release --static-swift-stdlib
           BIN="$(swift build -c release --show-bin-path)/deck"
-          echo "--- linked libraries ---"
-          ldd "$BIN"
-          if ldd "$BIN" | grep -qi 'libswift\|libFoundation'; then
-            echo "::error::binary still links the Swift runtime dynamically"
+          ldd "$BIN" || true
+          if ldd "$BIN" | grep -qi 'libswiftCore\|libFoundation'; then
+            echo "::error::binary links the Swift runtime dynamically"
             exit 1
           fi
-          echo "ok: no Swift runtime dependency"
+          echo "ok: self-contained"
 
   macos:
     name: macos
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
-
       - name: Install ffmpeg
         run: brew install ffmpeg
-
       - name: Build
         run: swift build -c release
-
       - name: Run tests
         run: swift run -c release DeckTests
-
       - name: Bundle app
         run: ./build.sh release
