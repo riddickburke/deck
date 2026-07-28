@@ -505,6 +505,41 @@ await T.test("streaming tracks are excluded from a sync plan") {
         "no streaming track may appear in a plan")
 }
 
+T.suite("Service playlists")
+
+func streamTrack(_ id: String, _ title: String) -> Track {
+    Track(source: .spotify, externalID: id, title: title, artist: "A",
+          albumArtist: "A", album: "B", duration: 100)
+}
+
+await T.test("resolves in playlist order, not library order") {
+    let library = [streamTrack("c", "C"), streamTrack("a", "A"), streamTrack("b", "B")]
+    let playlist = ServicePlaylist(
+        id: "p", name: "Mix", source: .spotify, trackIDs: ["b", "c", "a"])
+
+    T.equal(playlist.resolve(against: library).map(\.title), ["B", "C", "A"])
+}
+
+await T.test("drops references the library cannot supply") {
+    // A playlist can point at something unavailable in this region or pulled from the
+    // service; those must vanish rather than appear as blank rows.
+    let library = [streamTrack("a", "A")]
+    let playlist = ServicePlaylist(
+        id: "p", name: "Mix", source: .spotify, trackIDs: ["a", "missing", "gone"])
+
+    let resolved = playlist.resolve(against: library)
+    T.equal(resolved.count, 1)
+    T.equal(resolved.first?.title, "A")
+    T.equal(playlist.trackCount, 3, "the original count is preserved so the gap is reportable")
+}
+
+await T.test("a repeated track resolves at each position") {
+    let library = [streamTrack("a", "A"), streamTrack("b", "B")]
+    let playlist = ServicePlaylist(
+        id: "p", name: "Mix", source: .spotify, trackIDs: ["a", "b", "a"])
+    T.equal(playlist.resolve(against: library).map(\.title), ["A", "B", "A"])
+}
+
 // MARK: - Identifier migration
 
 T.suite("Legacy data migration")

@@ -154,6 +154,10 @@ struct RootView: View {
             StreamingView()
         case .search:
             SearchView()
+        case .servicePlaylist(let id):
+            if let playlist = app.servicePlaylist(id) {
+                ServicePlaylistView(playlist: playlist)
+            } else { missingState("playlist not found") }
         }
     }
 
@@ -170,6 +174,8 @@ struct RootView: View {
         case .settings: return "deck://settings"
         case .streaming: return "deck://streaming"
         case .search: return "deck://search"
+        case .servicePlaylist(let id):
+            return "deck://playlists/\(app.servicePlaylist(id)?.name ?? "")"
         }
     }
 
@@ -214,6 +220,8 @@ struct RootView: View {
         case .artist(let name): return app.albums(for: name).count
         case .playlist(let id): return app.playlist(id).map { app.tracks(in: $0).count } ?? 0
         case .queue: return app.player.queue.count
+        case .servicePlaylist(let id):
+            return app.servicePlaylist(id).map { app.tracks(in: $0).count } ?? 0
         case .sync, .settings, .streaming, .search: return 0
         }
     }
@@ -328,6 +336,9 @@ struct RootView: View {
             app.play(tracks: app.tracks(in: playlist), startingAt: index)
         case .queue:
             app.player.playTrack(at: index)
+        case .servicePlaylist(let id):
+            guard let playlist = app.servicePlaylist(id) else { return }
+            app.play(tracks: app.tracks(in: playlist), startingAt: index)
         case .sync, .settings, .streaming, .search:
             break
         }

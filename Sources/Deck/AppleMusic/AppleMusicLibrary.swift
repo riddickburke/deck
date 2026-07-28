@@ -128,6 +128,129 @@ enum AppleMusicLibrary {
         return value
     }
 
+    /// The user's own playlists, with their track ids in playlist order.
+    ///
+    /// Smart playlists and the service's editorial playlists are included when Music
+    /// exposes them; the built-in ones (Library, Music, Downloaded) are filtered out
+    /// because they duplicate the whole library.
+    static func importPlaylists() async throws -> (
+        playlists: [ServicePlaylist], tracks: [Track]
+    ) {
+        // Names and ids come back in one event; the track ids need one event per
+        // playlist, which is why the count is fetched first and empty ones skipped.
+        let namesScript = AppleEvents.music("""
+            set fs to (ASCII character 31)
+            set rs to (ASCII character 30)
+            set vLists to (every user playlist)
+            set vNames to {}
+            set vIDs to {}
+            set vCounts to {}
+            repeat with pl in vLists
+                set end of vNames to (name of pl)
+                set end of vIDs to ((persistent ID of pl) as text)
+                set end of vCounts to (count of tracks of pl)
+            end repeat
+            set AppleScript's text item delimiters to fs
+            set out to (vNames as text) & rs & (vIDs as text) & rs & (vCounts as text)
+            set AppleScript's text item delimiters to ""
+            return out
+            """)
+
+        let raw = try await AppleEvents.run(namesScript)
+        let columns = raw.components(separatedBy: AppleEvents.recordSeparator)
+            .map { $0.components(separatedBy: AppleEvents.fieldSeparator) }
+        guard columns.count >= 3 else { return ([], []) }
+
+        let names = columns[0], ids = columns[1], counts = columns[2]
+        var playlists: [ServicePlaylist] = []
+        var discovered: [Track] = []
+        var seenTrackIDs = Set<String>()
+        // Music can list the same playlist more than once, for example when a shared
+        // playlist also appears under a different source.
+        var seenPlaylistIDs = Set<String>()
+
+        for index in 0..<min(names.count, min(ids.count, counts.count)) {
+            let name = names[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            let id = ids[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            let count = Int(counts[index].trimmingCharacters(in: .whitespaces)) ?? 0
+
+            guard !name.isEmpty, !id.isEmpty, count > 0,
+                  !builtInPlaylistNames.contains(name.lowercased()),
+                  seenPlaylistIDs.insert(id).inserted
+            else { continue }
+
+            // Full metadata, not just ids: a playlist routinely contains tracks the user
+            // never added to their library, and those are absent from the library import.
+            // Resolving against the library alone dropped most of some playlists.
+            let contents = await tracks(inPlaylistWithPersistentID: id)
+            guard !contents.isEmpty else { continue }
+
+            playlists.append(ServicePlaylist(
+                id: id, name: name, source: .appleMusic,
+                trackIDs: contents.compactMap(\.externalID)))
+
+            for track in contents {
+                guard let trackID = track.externalID,
+                      seenTrackIDs.insert(trackID).inserted else { continue }
+                discovered.append(track)
+            }
+        }
+        // Music can surface one playlist under two persistent ids — a shared or synced
+        // list appearing under more than one source. Matching on name plus identical
+        // contents collapses those without merging two genuinely different playlists
+        // that happen to share a name.
+        var unique: [ServicePlaylist] = []
+        var fingerprints = Set<String>()
+        for playlist in playlists {
+            let fingerprint = "\(playlist.name)|\(playlist.trackIDs.joined(separator: ","))"
+            guard fingerprints.insert(fingerprint).inserted else { continue }
+            unique.append(playlist)
+        }
+
+        return (
+            unique.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending },
+            discovered)
+    }
+
+    /// Music's own containers, which mirror the library rather than being real playlists.
+    static let builtInPlaylistNames: Set<String> = [
+        "library", "music", "downloaded", "recently added", "recently played",
+        "movies", "tv shows", "podcasts", "audiobooks", "purchased",
+    ]
+
+    /// One playlist's tracks with full metadata, in playlist order.
+    static func tracks(inPlaylistWithPersistentID id: String) async -> [Track] {
+        let script = AppleEvents.music("""
+            set fs to (ASCII character 31)
+            set rs to (ASCII character 30)
+            set matches to (every user playlist whose persistent ID is "\(id)")
+            if (count of matches) is 0 then return ""
+            set pl to item 1 of matches
+            set vIDs to (get database ID of every track of pl)
+            set vTitles to (get name of every track of pl)
+            set vArtists to (get artist of every track of pl)
+            set vAlbumArtists to (get album artist of every track of pl)
+            set vAlbums to (get album of every track of pl)
+            set vDurations to (get duration of every track of pl)
+            set vNumbers to (get track number of every track of pl)
+            set vDiscs to (get disc number of every track of pl)
+            set vYears to (get year of every track of pl)
+            set vGenres to (get genre of every track of pl)
+            set vStatuses to (get cloud status of every track of pl)
+            set AppleScript's text item delimiters to fs
+            set out to (vIDs as text) & rs & (vTitles as text) & rs & ¬
+                (vArtists as text) & rs & (vAlbumArtists as text) & rs & ¬
+                (vAlbums as text) & rs & (vDurations as text) & rs & ¬
+                (vNumbers as text) & rs & (vDiscs as text) & rs & ¬
+                (vYears as text) & rs & (vGenres as text) & rs & ¬
+                (vStatuses as text)
+            set AppleScript's text item delimiters to ""
+            return out
+            """)
+        guard let raw = try? await AppleEvents.run(script), !raw.isEmpty else { return [] }
+        return parse(raw)
+    }
+
     /// Artwork for one track, as JPEG/PNG data. Fetched per album rather than per track
     /// because the data is large and identical across an album.
     static func artwork(forTrackID id: String) async -> Data? {

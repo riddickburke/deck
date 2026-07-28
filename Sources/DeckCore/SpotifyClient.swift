@@ -239,6 +239,87 @@ public actor SpotifyClient {
         return tracks
     }
 
+    /// The user's playlists, with their tracks in playlist order.
+    ///
+    /// Each playlist's tracks are a separate paged request, so this is proportional to
+    /// the number of playlists rather than one call. Local-only files and podcast
+    /// episodes appear in playlists with no URI and are skipped.
+    public func playlists(
+        progress: @Sendable (String) -> Void = { _ in }
+    ) async throws -> (playlists: [ServicePlaylist], tracks: [Track]) {
+        struct Page: Decodable {
+            struct Item: Decodable {
+                let id: String
+                let name: String
+                struct Tracks: Decodable { let total: Int }
+                let tracks: Tracks
+            }
+            let items: [Item]
+            let next: String?
+        }
+
+        var result: [ServicePlaylist] = []
+        var discovered: [Track] = []
+        var seen = Set<String>()
+        var next: String? = "https://api.spotify.com/v1/me/playlists?limit=50"
+
+        while let url = next {
+            let page: Page = try await get(url)
+            for item in page.items where item.tracks.total > 0 {
+                progress(item.name)
+                let contents = try await playlistTracks(id: item.id)
+                guard !contents.isEmpty else { continue }
+
+                result.append(ServicePlaylist(
+                    id: item.id, name: item.name, source: .spotify,
+                    trackIDs: contents.compactMap(\.externalID)))
+
+                // Playlists routinely contain tracks that are not in the saved library,
+                // so they are collected here or the playlist would resolve to nothing.
+                for track in contents {
+                    guard let id = track.externalID, seen.insert(id).inserted else { continue }
+                    discovered.append(track)
+                }
+            }
+            next = page.next
+        }
+        return (result, discovered)
+    }
+
+    private func playlistTracks(id: String) async throws -> [Track] {
+        struct Page: Decodable {
+            struct Item: Decodable { let track: SpotifyTrackPayload? }
+            let items: [Item]
+            let next: String?
+        }
+
+        var tracks: [Track] = []
+        var next: String? =
+            "https://api.spotify.com/v1/playlists/\(id)/tracks?limit=100"
+
+        while let url = next {
+            let page: Page = try await get(url)
+            for item in page.items {
+                guard let t = item.track, let uri = t.uri else { continue }
+                tracks.append(Track(
+                    source: .spotify,
+                    externalID: uri,
+                    title: t.name,
+                    artist: t.artists.first?.name ?? Track.unknown,
+                    albumArtist: t.album?.artists.first?.name
+                        ?? t.artists.first?.name ?? Track.unknown,
+                    album: t.album?.name ?? Track.unknown,
+                    year: t.album?.release_date.flatMap { MetadataReader.parseYear($0) },
+                    trackNumber: t.track_number,
+                    discNumber: t.disc_number,
+                    duration: Double(t.duration_ms) / 1000,
+                    codec: "spotify"))
+            }
+            next = page.next
+        }
+        return tracks
+    }
+
     /// Cover art URL for an album, taken from the saved-albums payload.
     public func albumArtworkURL(forTrackURI uri: String) async throws -> URL? {
         let id = uri.split(separator: ":").last.map(String.init) ?? uri

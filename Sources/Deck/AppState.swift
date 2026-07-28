@@ -14,6 +14,8 @@ enum Route: Hashable {
     case settings
     /// Picker for choosing a streaming service.
     case streaming
+    /// A playlist belonging to a streaming service.
+    case servicePlaylist(String)
     /// Full-page search across artists, albums and songs at once.
     case search
 }
@@ -508,12 +510,30 @@ final class AppState: ObservableObject {
     // MARK: - Streaming sources
 
     @Published var appleMusicTracks: [Track] = []
+    /// Playlists belonging to whichever services have been imported.
+    @Published var servicePlaylists: [ServicePlaylist] = []
     @Published var isImportingAppleMusic = false
     @Published var appleMusicError: String?
     /// nil shows everything; otherwise only that source.
     @Published var sourceFilter: TrackSource? { didSet { rebuildLibrary() } }
 
     let appleMusicRemote = AppleMusicRemote()
+
+    /// Service playlists for the source currently being browsed.
+    var currentServicePlaylists: [ServicePlaylist] {
+        guard let source = sourceFilter, source.isStreaming else { return [] }
+        return servicePlaylists.filter { $0.source == source }
+    }
+
+    func servicePlaylist(_ id: String) -> ServicePlaylist? {
+        servicePlaylists.first { $0.id == id }
+    }
+
+    /// Resolves a service playlist against the imported library for its own service.
+    func tracks(in playlist: ServicePlaylist) -> [Track] {
+        let pool = playlist.source == .spotify ? spotifyTracks : appleMusicTracks
+        return playlist.resolve(against: pool)
+    }
 
     @Published var spotifyTracks: [Track] = []
     @Published var isImportingSpotify = false
@@ -586,6 +606,7 @@ final class AppState: ObservableObject {
         Task {
             await spotify.signOut()
             spotifyTracks = []
+            servicePlaylists.removeAll { $0.source == .spotify }
             rebuildLibrary()
             statusMessage = "signed out of Spotify"
         }
@@ -611,11 +632,30 @@ final class AppState: ObservableObject {
                     return seen.insert(id).inserted
                 }
 
+                self.statusMessage = "spotify: \(merged.count) tracks · reading playlists…"
+
+                // Playlists routinely reference tracks that are not in the saved
+                // library, so whatever they turn up is folded into the pool or the
+                // playlist would resolve to nothing.
+                let (lists, extra) = (try? await spotify.client.playlists { name in
+                    Task { @MainActor in self.statusMessage = "spotify playlist: \(name)" }
+                }) ?? ([], [])
+
+                var pool = merged
+                var known = Set(merged.compactMap(\.externalID))
+                for track in extra {
+                    guard let id = track.externalID, known.insert(id).inserted else { continue }
+                    pool.append(track)
+                }
+
                 await spotify.persistCurrentTokens()
-                self.spotifyTracks = merged
+                self.spotifyTracks = pool
+                self.servicePlaylists.removeAll { $0.source == .spotify }
+                self.servicePlaylists.append(contentsOf: lists)
                 self.isImportingSpotify = false
                 self.rebuildLibrary()
-                self.statusMessage = "spotify: \(merged.count) tracks"
+                self.statusMessage =
+                    "spotify: \(pool.count) tracks, \(lists.count) playlists"
             } catch {
                 self.isImportingSpotify = false
                 self.statusMessage = error.localizedDescription
@@ -647,11 +687,35 @@ final class AppState: ObservableObject {
                 let imported = try await AppleMusicLibrary.importLibrary()
                 await MainActor.run {
                     self.appleMusicTracks = imported
+                    self.rebuildLibrary()
+                    self.statusMessage = "apple music: \(imported.count) tracks · reading playlists…"
+                }
+
+                // Playlists cost one Apple Event each, so they come after the library
+                // rather than holding it up.
+                let (lists, extra) = (try? await AppleMusicLibrary.importPlaylists())
+                    ?? ([], [])
+
+                // Playlists routinely contain tracks the user never added to their
+                // library, which are absent from the library import. Folding them in is
+                // what stops a playlist resolving to a fraction of itself.
+                var pool = imported
+                var known = Set(imported.compactMap(\.externalID))
+                for track in extra {
+                    guard let id = track.externalID, known.insert(id).inserted else { continue }
+                    pool.append(track)
+                }
+
+                await MainActor.run {
+                    self.appleMusicTracks = pool
+                    self.servicePlaylists.removeAll { $0.source == .appleMusic }
+                    self.servicePlaylists.append(contentsOf: lists)
                     self.isImportingAppleMusic = false
                     self.rebuildLibrary()
-                    let cloud = imported.count { AppleMusicLibrary.isCloudBacked($0) }
+                    let cloud = pool.count { AppleMusicLibrary.isCloudBacked($0) }
                     self.statusMessage =
-                        "apple music: \(imported.count) tracks, \(cloud) from the cloud"
+                        "apple music: \(pool.count) tracks, \(cloud) from the cloud, "
+                        + "\(lists.count) playlists"
                 }
             } catch {
                 await MainActor.run {

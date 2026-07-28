@@ -39,6 +39,14 @@ struct StreamingSidebar: View {
                         navRow("queue", count: app.player.queue.count, route: .queue)
                     }
 
+                    if !app.currentServicePlaylists.isEmpty {
+                        group("playlists") {
+                            ForEach(app.currentServicePlaylists) { playlist in
+                                playlistRow(playlist)
+                            }
+                        }
+                    }
+
                     group("service") {
                         actionRow(
                             isRefreshing ? "refreshing…" : "refresh library",
@@ -133,6 +141,31 @@ struct StreamingSidebar: View {
         .contentShape(Rectangle())
         .background(active ? app.theme.selection.opacity(0.55) : .clear)
         .onTapGesture { app.navigate(to: route) }
+    }
+
+    private func playlistRow(_ playlist: ServicePlaylist) -> some View {
+        let active = app.route == .servicePlaylist(playlist.id)
+        return HStack(spacing: 6) {
+            Text(active ? "›" : " ")
+                .font(DeckFont.mono(11))
+                .foregroundStyle(accent)
+            Text(playlist.name)
+                .font(DeckFont.mono(11))
+                .foregroundStyle(active ? app.theme.fg : app.theme.muted)
+                .lineLimit(1)
+            Spacer()
+            Text("\(playlist.trackCount)")
+                .font(DeckFont.mono(10))
+                .foregroundStyle(app.theme.muted.opacity(0.7))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .background(active ? app.theme.selection.opacity(0.55) : .clear)
+        .onTapGesture { app.navigate(to: .servicePlaylist(playlist.id)) }
+        .contextMenu {
+            Button("play") { app.play(tracks: app.tracks(in: playlist)) }
+        }
     }
 
     private func actionRow(

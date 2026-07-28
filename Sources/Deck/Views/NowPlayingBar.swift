@@ -292,6 +292,7 @@ struct StatusBar: View {
         case .settings: return "settings"
         case .streaming: return "streaming"
         case .search: return "search"
+        case .servicePlaylist(let id): return app.servicePlaylist(id)?.name ?? "playlist"
         }
     }
 

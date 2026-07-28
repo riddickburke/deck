@@ -54,6 +54,22 @@ enum AppleMusicProbe {
                     print("    [\(flag)] \(album.title) — \(album.artist) (\(album.tracks.count))")
                 }
 
+                let playlistStart = Date()
+                let (lists, extraTracks) = (try? await AppleMusicLibrary.importPlaylists())
+                    ?? ([], [])
+                print(String(format: "\n  playlists: %d in %.2fs",
+                             lists.count, Date().timeIntervalSince(playlistStart)))
+                print("    playlist tracks not in the library: \(extraTracks.count)")
+                var pool = tracks
+                var known = Set(tracks.compactMap(\.externalID))
+                for track in extraTracks where known.insert(track.externalID ?? "").inserted {
+                    pool.append(track)
+                }
+                for list in lists.prefix(8) {
+                    let resolved = list.resolve(against: pool)
+                    print("    \(list.name) — \(list.trackCount) ids, \(resolved.count) resolved")
+                }
+
                 // Artwork is fetched per track and is the slowest part, so measure one.
                 if let first = tracks.first(where: { AppleMusicLibrary.isCloudBacked($0) }),
                    let id = first.externalID {
