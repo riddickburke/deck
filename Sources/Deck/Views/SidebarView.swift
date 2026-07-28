@@ -18,7 +18,7 @@ struct SidebarView: View {
                     }
 
                     group("sources") {
-                        sourceRow(nil, label: "all", count: app.localTracks.count + app.appleMusicTracks.count)
+                        sourceRow(nil, label: "all", count: app.localTracks.count + app.appleMusicTracks.count + app.spotifyTracks.count)
                         sourceRow(.local, label: "local", count: app.localTracks.count)
 
                         if app.appleMusicTracks.isEmpty {
@@ -36,6 +36,32 @@ struct SidebarView: View {
                             sourceRow(
                                 .appleMusic, label: "apple music",
                                 count: app.appleMusicTracks.count)
+                        }
+
+                        if app.spotifyTracks.isEmpty {
+                            HStack {
+                                BracketButton(
+                                    label: app.isImportingSpotify ? "reading…"
+                                        : (app.spotify.isAuthorized ? "+ import spotify" : "+ connect spotify"),
+                                    tint: app.theme.green,
+                                    disabled: app.isImportingSpotify || app.spotify.isSigningIn
+                                ) {
+                                    app.spotify.isAuthorized ? app.importSpotify() : app.signInToSpotify()
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 2)
+                        } else {
+                            sourceRow(.spotify, label: "spotify", count: app.spotifyTracks.count)
+                        }
+
+                        if let error = app.spotify.lastError {
+                            Text(error)
+                                .font(DeckFont.mono(9))
+                                .foregroundStyle(app.theme.red)
+                                .padding(.horizontal, 12)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
 
                         if let error = app.appleMusicError {
@@ -147,6 +173,10 @@ struct SidebarView: View {
         .contextMenu {
             if source == .appleMusic {
                 Button("refresh from Music.app") { app.importAppleMusic() }
+            }
+            if source == .spotify {
+                Button("refresh from Spotify") { app.importSpotify() }
+                Button("sign out") { app.signOutOfSpotify() }
             }
         }
     }

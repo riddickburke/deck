@@ -18,6 +18,9 @@ public struct Config: Codable, Equatable, Sendable {
     public var writeDeviceArtwork: Bool
     public var deviceArtworkSize: Int
     public var onlineLookupEnabled: Bool
+    /// Spotify application client ID. The user registers their own; there is no secret,
+    /// because PKCE does not need one and a secret in a shipped binary is not a secret.
+    public var spotifyClientID: String?
 
     public enum RepeatMode: String, Codable, CaseIterable, Sendable {
         case off, all, one
@@ -42,7 +45,8 @@ public struct Config: Codable, Equatable, Sendable {
         deviceFolderTemplate: "{albumartist}/{album}",
         writeDeviceArtwork: true,
         deviceArtworkSize: 500,
-        onlineLookupEnabled: true
+        onlineLookupEnabled: true,
+        spotifyClientID: nil
     )
 
     // MARK: - Paths
@@ -152,6 +156,12 @@ public struct Config: Codable, Equatable, Sendable {
 
     public static var playlistsURL: URL {
         appSupportDirectory.appendingPathComponent("playlists.json")
+    }
+
+    /// OAuth tokens are kept separate from the settings file so the file itself can be
+    /// restricted to the owner, and so sharing a config never leaks credentials.
+    public static var spotifyTokensURL: URL {
+        appSupportDirectory.appendingPathComponent("spotify-tokens.json")
     }
 
     // MARK: - Load / save

@@ -284,6 +284,88 @@ await T.test("only files we recorded can be orphaned") {
     T.expect(!orphans.contains(theirs), "a file we never wrote must not be deletable")
 }
 
+// MARK: - PKCE
+
+T.suite("SHA-256 and PKCE")
+
+await T.test("matches the published SHA-256 vectors") {
+    // Hand-written because CryptoKit is Apple-only. A wrong digest would not fail
+    // loudly — Spotify would simply reject every sign-in — so it is checked against
+    // the FIPS 180-4 examples.
+    T.equal(
+        SHA256.hex(""),
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "empty string")
+    T.equal(
+        SHA256.hex("abc"),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "abc")
+    T.equal(
+        SHA256.hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"),
+        "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+        "two-block message")
+}
+
+await T.test("handles a message that lands exactly on a block boundary") {
+    // 56 bytes is the worst case for the padding rule: the length no longer fits in
+    // the current block, so a whole extra block must be appended.
+    T.equal(
+        SHA256.hex(String(repeating: "a", count: 55)),
+        "9f4390f8d30c2dd92ec9f095b65e2b9ae9b0a925a5258e241c9f1e910f734318",
+        "55 bytes")
+    T.equal(
+        SHA256.hex(String(repeating: "a", count: 56)),
+        "b35439a4ac6f0948b6d6f9e3c6af0f5f590ce20f1bde7090ef7970686ec6738a",
+        "56 bytes")
+    T.equal(
+        SHA256.hex(String(repeating: "a", count: 64)),
+        "ffe054fe7ae0cb6dc65c3af9b61d5209f439851db43d0ba5997337df154668eb",
+        "64 bytes")
+}
+
+await T.test("produces an unpadded base64url challenge") {
+    // RFC 7636 requires base64url with the padding stripped.
+    guard let challenge = T.notNil(
+        PKCE.challenge(for: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+        "challenge") else { return }
+
+    T.expect(!challenge.contains("="), "must be unpadded")
+    T.expect(!challenge.contains("+") && !challenge.contains("/"), "must be url-safe")
+    T.equal(challenge.count, 43, "sha-256 base64url is always 43 characters")
+    T.equal(
+        challenge, "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+        "matches the RFC 7636 worked example")
+}
+
+T.suite("OAuth callback")
+
+await T.test("extracts the code and state from the redirect") {
+    let request = "GET /callback?code=AQD123abc&state=xyz789 HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"
+    let callback = LoopbackServer.parse(request)
+    T.equal(callback.code, "AQD123abc")
+    T.equal(callback.state, "xyz789")
+    T.isNil(callback.error, "error")
+}
+
+await T.test("surfaces a denial instead of pretending it worked") {
+    let request = "GET /callback?error=access_denied&state=xyz HTTP/1.1\r\n\r\n"
+    let callback = LoopbackServer.parse(request)
+    T.equal(callback.error, "access_denied")
+    T.isNil(callback.code, "code")
+}
+
+await T.test("percent-decodes parameter values") {
+    // Authorization codes are URL-encoded, so a raw value would fail the exchange.
+    let request = "GET /callback?code=a%2Fb%2Bc%3Dd&state=s HTTP/1.1\r\n\r\n"
+    T.equal(LoopbackServer.parse(request).code, "a/b+c=d")
+}
+
+await T.test("a request with no query yields nothing rather than crashing") {
+    let callback = LoopbackServer.parse("GET /callback HTTP/1.1\r\n\r\n")
+    T.isNil(callback.code, "code")
+    T.notNil(callback.error, "should report malformed")
+}
+
 // MARK: - Streaming sources
 
 T.suite("Streaming sources")

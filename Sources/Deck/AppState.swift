@@ -123,6 +123,9 @@ final class AppState: ObservableObject {
             return await ArtworkStore.shared.artwork(for: album)
         }
 
+        let clientID = loaded.spotifyClientID
+        Task { await spotify.restore(clientID: clientID) }
+
         refreshDevices()
         // Volumes appear and disappear without notice; polling is simpler and cheap
         // enough at this interval than subscribing to workspace mount notifications
@@ -246,6 +249,10 @@ final class AppState: ObservableObject {
             startRemotePlayback(track)
             return
         }
+        if track.source == .spotify {
+            startSpotifyPlayback(track)
+            return
+        }
 
         if isRemoteActive { stopRemotePlayback() }
         player.setQueue(list.filter { !$0.isStreaming }, startAt: index)
@@ -256,20 +263,35 @@ final class AppState: ObservableObject {
 
     func togglePlayPause() {
         guard isRemoteActive else { player.toggle(); return }
-        let remote = appleMusicRemote
         let playing = remoteIsPlaying
         remoteIsPlaying.toggle()
+        if activeBackend == .spotify {
+            Task {
+                do { playing ? try await spotify.client.pause() : try await spotify.client.resume() }
+                catch { self.statusMessage = error.localizedDescription }
+            }
+            return
+        }
+        let remote = appleMusicRemote
         Task { playing ? await remote.pause() : await remote.resume() }
     }
 
     func nextTrack() {
         guard isRemoteActive else { player.next(); return }
+        if activeBackend == .spotify {
+            Task { try? await spotify.client.next() }
+            return
+        }
         let remote = appleMusicRemote
         Task { await remote.next() }
     }
 
     func previousTrack() {
         guard isRemoteActive else { player.previous(); return }
+        if activeBackend == .spotify {
+            Task { try? await spotify.client.previous() }
+            return
+        }
         let remote = appleMusicRemote
         Task { await remote.previous() }
     }
@@ -277,6 +299,10 @@ final class AppState: ObservableObject {
     func seek(to seconds: TimeInterval) {
         guard isRemoteActive else { player.seek(to: seconds); return }
         remotePosition = seconds
+        if activeBackend == .spotify {
+            Task { try? await spotify.client.seek(to: seconds) }
+            return
+        }
         let remote = appleMusicRemote
         Task { await remote.seek(to: seconds) }
     }
@@ -452,6 +478,11 @@ final class AppState: ObservableObject {
 
     let appleMusicRemote = AppleMusicRemote()
 
+    @Published var spotifyTracks: [Track] = []
+    @Published var isImportingSpotify = false
+    @Published var spotifyDeviceName: String?
+    let spotify = SpotifySession()
+
     /// Which engine owns playback right now. Apple Music tracks are played by Music.app,
     /// so the transport has to be pointed at whichever is actually running.
     @Published private(set) var activeBackend: TrackSource = .local
@@ -472,7 +503,68 @@ final class AppState: ObservableObject {
     var availableSources: [TrackSource] {
         var sources: [TrackSource] = [.local]
         if !appleMusicTracks.isEmpty { sources.append(.appleMusic) }
+        if !spotifyTracks.isEmpty { sources.append(.spotify) }
         return sources
+    }
+
+    // MARK: Spotify
+
+    func signInToSpotify() {
+        guard let id = config.spotifyClientID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !id.isEmpty else {
+            statusMessage = "add a Spotify client ID in settings first"
+            return
+        }
+        Task {
+            await spotify.signIn(clientID: id)
+            if spotify.isAuthorized {
+                statusMessage = "signed in to Spotify"
+                importSpotify()
+            } else if let error = spotify.lastError {
+                statusMessage = error
+            }
+        }
+    }
+
+    func signOutOfSpotify() {
+        Task {
+            await spotify.signOut()
+            spotifyTracks = []
+            rebuildLibrary()
+            statusMessage = "signed out of Spotify"
+        }
+    }
+
+    func importSpotify() {
+        guard !isImportingSpotify else { return }
+        isImportingSpotify = true
+        statusMessage = "reading Spotify library…"
+
+        Task {
+            do {
+                // Saved albums and saved tracks are separate collections in the API;
+                // a track saved on its own never appears in the albums response.
+                let albums = try await spotify.client.savedAlbums { count in
+                    Task { @MainActor in self.statusMessage = "spotify: \(count) tracks…" }
+                }
+                let singles = try await spotify.client.savedTracks()
+
+                var seen = Set<String>()
+                let merged = (albums + singles).filter {
+                    guard let id = $0.externalID else { return false }
+                    return seen.insert(id).inserted
+                }
+
+                await spotify.persistCurrentTokens()
+                self.spotifyTracks = merged
+                self.isImportingSpotify = false
+                self.rebuildLibrary()
+                self.statusMessage = "spotify: \(merged.count) tracks"
+            } catch {
+                self.isImportingSpotify = false
+                self.statusMessage = error.localizedDescription
+            }
+        }
     }
 
     /// Recomputes the browsable library from the enabled sources.
@@ -481,8 +573,8 @@ final class AppState: ObservableObject {
         switch sourceFilter {
         case .local: combined = localTracks
         case .appleMusic: combined = appleMusicTracks
-        case .spotify: combined = []
-        case nil: combined = localTracks + appleMusicTracks
+        case .spotify: combined = spotifyTracks
+        case nil: combined = localTracks + appleMusicTracks + spotifyTracks
         }
         tracks = combined
         albums = LibraryGrouping.albums(from: combined)
@@ -513,6 +605,37 @@ final class AppState: ObservableObject {
                 }
             }
         }
+    }
+
+    private func startSpotifyPlayback(_ track: Track) {
+        guard let uri = track.externalID else { return }
+        player.pause()
+
+        activeBackend = .spotify
+        remoteTrack = track
+        remoteDuration = track.duration
+        remotePosition = 0
+        remoteIsPlaying = true
+
+        Task {
+            do {
+                // Connect can only target a device that already exists, so an active
+                // Spotify client is a precondition rather than something Deck can create.
+                let devices = try await spotify.client.devices()
+                let target = devices.first { $0.isActive } ?? devices.first
+                guard let target else {
+                    throw SpotifyClient.Failure.noActiveDevice
+                }
+                self.spotifyDeviceName = target.name
+                try await spotify.client.play(uri: uri, deviceID: target.id)
+                await spotify.persistCurrentTokens()
+            } catch {
+                self.statusMessage = error.localizedDescription
+                self.remoteIsPlaying = false
+                self.activeBackend = .local
+            }
+        }
+        startRemotePolling()
     }
 
     // MARK: Remote transport
@@ -549,6 +672,23 @@ final class AppState: ObservableObject {
         remoteTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.isRemoteActive else { return }
+
+                if self.activeBackend == .spotify {
+                    // `try?` on a throwing call returning an Optional gives a double
+                    // Optional, so it has to be flattened before binding.
+                    if let state = (try? await self.spotify.client.playbackState()) ?? nil {
+                        self.remoteIsPlaying = state.isPlaying
+                        self.remotePosition = state.position
+                        if state.duration > 0 { self.remoteDuration = state.duration }
+                        self.spotifyDeviceName = state.deviceName
+                        if let uri = state.trackURI, uri != self.remoteTrack?.externalID,
+                           let match = self.spotifyTracks.first(where: { $0.externalID == uri }) {
+                            self.remoteTrack = match
+                        }
+                    }
+                    return
+                }
+
                 let state = await self.appleMusicRemote.refreshState()
                 self.remoteIsPlaying = state.isPlaying
                 self.remotePosition = state.position

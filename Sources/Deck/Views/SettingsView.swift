@@ -13,6 +13,7 @@ struct SettingsView: View {
                 themeSection
                 eqSection
                 metadataSection
+                streamingSection
                 toolingSection
                 cacheSection
             }
@@ -216,6 +217,65 @@ struct SettingsView: View {
     }
 
     // MARK: Tooling
+
+    private var streamingSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "streaming")
+
+            Text("apple music plays through Music.app, because subscription tracks are DRM-protected streams Deck cannot decode itself. spotify plays through an official spotify client over Connect, for the same reason. neither can be synced to a rockbox player.")
+                .font(DeckFont.mono(9))
+                .foregroundStyle(app.theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                Text("apple music")
+                    .font(DeckFont.mono(11))
+                    .foregroundStyle(app.theme.fg)
+                Text("\(app.appleMusicTracks.count) tracks")
+                    .font(DeckFont.mono(10))
+                    .foregroundStyle(app.theme.muted)
+                BracketButton(
+                    label: app.isImportingAppleMusic ? "reading…" : "import",
+                    disabled: app.isImportingAppleMusic
+                ) { app.importAppleMusic() }
+            }
+
+            Divider().background(app.theme.border)
+
+            HStack(spacing: 8) {
+                Text("spotify client id")
+                    .font(DeckFont.mono(10))
+                    .foregroundStyle(app.theme.muted)
+                TUITextField(
+                    placeholder: "from developer.spotify.com",
+                    text: Binding(
+                        get: { app.config.spotifyClientID ?? "" },
+                        set: { app.config.spotifyClientID = $0.isEmpty ? nil : $0 }),
+                    width: 280)
+            }
+
+            Text("register an app at developer.spotify.com/dashboard and add exactly this redirect uri: \(SpotifySession.redirectURI) — spotify matches it character for character. playback control needs premium; browsing does not.")
+                .font(DeckFont.mono(9))
+                .foregroundStyle(app.theme.muted.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                if app.spotify.isAuthorized {
+                    Text("signed in")
+                        .font(DeckFont.mono(10))
+                        .foregroundStyle(app.theme.green)
+                    BracketButton(label: "import library") { app.importSpotify() }
+                    BracketButton(label: "sign out", tint: app.theme.red) { app.signOutOfSpotify() }
+                } else {
+                    BracketButton(
+                        label: app.spotify.isSigningIn ? "waiting for browser…" : "connect spotify",
+                        tint: app.theme.green,
+                        disabled: app.spotify.isSigningIn
+                    ) { app.signInToSpotify() }
+                }
+            }
+        }
+    }
 
     private var toolingSection: some View {
         VStack(alignment: .leading, spacing: 6) {
