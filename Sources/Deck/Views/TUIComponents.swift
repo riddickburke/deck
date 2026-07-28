@@ -129,6 +129,8 @@ struct TUITextField: View {
     var onSubmit: () -> Void = {}
     var onCancel: () -> Void = {}
     var focusOnAppear: Bool = false
+    /// Oversized styling for the dedicated search page.
+    var large: Bool = false
     /// Incremented by the owner to pull focus here — used by the `/` key, which has to
     /// focus a field it does not own.
     var focusTrigger: Int = 0
@@ -139,12 +141,12 @@ struct TUITextField: View {
     var body: some View {
         TextField(placeholder, text: $text)
             .textFieldStyle(.plain)
-            .font(DeckFont.mono(11))
+            .font(DeckFont.mono(large ? 20 : 11))
             .foregroundStyle(app.theme.fg)
             .focused($focused)
             .frame(width: width)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 4)
+            .padding(.horizontal, large ? 10 : 6)
+            .padding(.vertical, large ? 8 : 4)
             .background(app.theme.bgInset)
             .overlay(Rectangle().strokeBorder(
                 focused ? app.theme.accent : app.theme.border, lineWidth: 1))

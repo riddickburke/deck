@@ -15,7 +15,11 @@ struct RootView: View {
                 topBar
 
                 HStack(spacing: 0) {
-                    SidebarView()
+                    if app.isStreamingMode {
+                        StreamingSidebar()
+                    } else {
+                        SidebarView()
+                    }
                     contentPanel
                 }
                 .padding(6)
@@ -66,7 +70,11 @@ struct RootView: View {
                 }
             }
 
-            topBarSearch
+            BracketButton(
+                label: app.searchQuery.isEmpty ? "search" : "search: \(app.searchQuery)",
+                tint: app.searchQuery.isEmpty ? nil : app.theme.yellow,
+                compact: true
+            ) { app.openSearch() }
 
             BracketButton(
                 label: app.isStreamingMode ? "◆ streaming" : "streaming",
@@ -92,45 +100,6 @@ struct RootView: View {
         }
     }
 
-    /// Search lives in the toolbar and filters whatever the current source is, so the
-    /// same field covers local files and a streaming library without a mode switch.
-    private var topBarSearch: some View {
-        HStack(spacing: 5) {
-            Text("/")
-                .font(DeckFont.mono(11))
-                .foregroundStyle(app.searchQuery.isEmpty ? app.theme.muted : app.theme.yellow)
-
-            TUITextField(
-                placeholder: searchPlaceholder,
-                text: $app.searchQuery,
-                width: 220,
-                onSubmit: { keyboardFocused = true },
-                onCancel: {
-                    app.searchQuery = ""
-                    keyboardFocused = true
-                },
-                focusTrigger: app.searchFocusTrigger)
-
-            if !app.searchQuery.isEmpty {
-                BracketButton(label: "×", compact: true) {
-                    app.searchQuery = ""
-                }
-                Text("\(app.filteredAlbums.count)a \(app.filteredTracks.count)t")
-                    .font(DeckFont.mono(9))
-                    .foregroundStyle(app.theme.muted)
-            }
-        }
-    }
-
-    private var searchPlaceholder: String {
-        switch app.sourceFilter {
-        case .appleMusic: return "search apple music"
-        case .spotify: return "search spotify"
-        case .local: return "search local library"
-        case nil: return "search everything"
-        }
-    }
-
     private var scopeLabel: String {
         let scope: String
         switch app.sourceFilter {
@@ -149,7 +118,7 @@ struct RootView: View {
         TUIPanel(
             title: panelTitle,
             focused: app.focusedPane == .content,
-            trailing: app.isSearching ? nil : "\(itemCount) items"
+            trailing: "\(itemCount) items"
         ) {
             VStack(spacing: 0) { content }
         }
@@ -183,6 +152,8 @@ struct RootView: View {
             SettingsView()
         case .streaming:
             StreamingView()
+        case .search:
+            SearchView()
         }
     }
 
@@ -198,37 +169,8 @@ struct RootView: View {
         case .sync: return "deck://sync"
         case .settings: return "deck://settings"
         case .streaming: return "deck://streaming"
+        case .search: return "deck://search"
         }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 6) {
-            Text("/")
-                .font(DeckFont.mono(12))
-                .foregroundStyle(app.theme.yellow)
-            TUITextField(
-                placeholder: "search",
-                text: $app.searchQuery,
-                onSubmit: {
-                    app.isSearching = false
-                    keyboardFocused = true
-                },
-                onCancel: {
-                    app.isSearching = false
-                    app.searchQuery = ""
-                    keyboardFocused = true
-                },
-                focusOnAppear: true
-            )
-            Spacer()
-            Text("\(itemCount) matches")
-                .font(DeckFont.mono(10))
-                .foregroundStyle(app.theme.muted)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(app.theme.bgInset)
-        .overlay(alignment: .bottom) { TUIDivider() }
     }
 
     private var emptyState: some View {
@@ -272,7 +214,7 @@ struct RootView: View {
         case .artist(let name): return app.albums(for: name).count
         case .playlist(let id): return app.playlist(id).map { app.tracks(in: $0).count } ?? 0
         case .queue: return app.player.queue.count
-        case .sync, .settings, .streaming: return 0
+        case .sync, .settings, .streaming, .search: return 0
         }
     }
 
@@ -320,7 +262,7 @@ struct RootView: View {
         case "G": app.selectionIndex = max(0, itemCount - 1)
         case "h": app.goBack()
         case "l": activateSelection()
-        case "/": app.searchFocusTrigger += 1
+        case "/": app.openSearch()
         case ":": app.showCommandPalette = true
         case "n": app.nextTrack()
         case "p": app.previousTrack()
@@ -386,7 +328,7 @@ struct RootView: View {
             app.play(tracks: app.tracks(in: playlist), startingAt: index)
         case .queue:
             app.player.playTrack(at: index)
-        case .sync, .settings, .streaming:
+        case .sync, .settings, .streaming, .search:
             break
         }
     }

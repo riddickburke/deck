@@ -291,6 +291,7 @@ struct StatusBar: View {
         case .sync: return "sync"
         case .settings: return "settings"
         case .streaming: return "streaming"
+        case .search: return "search"
         }
     }
 

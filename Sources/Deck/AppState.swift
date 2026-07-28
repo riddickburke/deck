@@ -14,6 +14,8 @@ enum Route: Hashable {
     case settings
     /// Picker for choosing a streaming service.
     case streaming
+    /// Full-page search across artists, albums and songs at once.
+    case search
 }
 
 enum Pane: Hashable { case sidebar, content }
@@ -44,7 +46,6 @@ final class AppState: ObservableObject {
     // MARK: Search / command
 
     @Published var searchQuery = ""
-    @Published var isSearching = false
     /// Bumped to move keyboard focus into the toolbar search field.
     @Published var searchFocusTrigger = 0
     @Published var showCommandPalette = false
@@ -66,7 +67,7 @@ final class AppState: ObservableObject {
 
     /// Keyboard shortcuts should be ignored entirely while typing or in a modal.
     var keyboardShortcutsSuppressed: Bool {
-        textInputFocused || showCommandPalette || isSearching
+        textInputFocused || showCommandPalette
     }
 
     // MARK: Devices
@@ -166,6 +167,32 @@ final class AppState: ObservableObject {
     }
 
     var artistNames: [String] { LibraryGrouping.artists(from: albums) }
+
+    var filteredArtists: [String] {
+        guard !searchQuery.isEmpty else { return artistNames }
+        let q = searchQuery.lowercased()
+        return artistNames.filter { $0.lowercased().contains(q) }
+    }
+
+    /// True when the query matches nothing at all, so the page can say so once rather
+    /// than showing three empty sections.
+    var searchHasResults: Bool {
+        !filteredArtists.isEmpty || !filteredAlbums.isEmpty || !filteredTracks.isEmpty
+    }
+
+    var searchScopeLabel: String {
+        switch sourceFilter {
+        case .appleMusic: return "apple music"
+        case .spotify: return "spotify"
+        case .local: return "local library"
+        case nil: return "everything"
+        }
+    }
+
+    func openSearch() {
+        navigate(to: .search)
+        searchFocusTrigger += 1
+    }
 
     func albums(for artist: String) -> [Album] {
         albums.filter { $0.artist == artist }
