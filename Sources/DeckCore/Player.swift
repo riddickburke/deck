@@ -1,7 +1,11 @@
+import Foundation
+
+// AVAudioEngine, Accelerate and Combine are Apple-only. The Linux build uses
+// MPVPlayer instead, which conforms to the same PlaybackEngine protocol.
+#if canImport(AVFoundation) && canImport(Combine)
 import AVFoundation
 import Accelerate
 import Combine
-import Foundation
 
 /// Audio playback built on AVAudioEngine rather than AVPlayer, because the engine gives
 /// us three things the simpler API cannot: a real parametric EQ, a render tap for the
@@ -448,36 +452,13 @@ public final class Player: ObservableObject {
         }
     }
 
-    /// Log-spaced buckets, because linear FFT bins put almost everything in the first
-    /// few bars and the visualiser looks dead.
+    /// Retained so existing call sites keep working; the implementation is portable.
     public static func foldIntoBands(_ magnitudes: [Float], bandCount: Int) -> [Float] {
-        guard !magnitudes.isEmpty, bandCount > 0 else { return [] }
-        var out = [Float](repeating: 0, count: bandCount)
-        let binCount = magnitudes.count
-        for band in 0..<bandCount {
-            let lo = Double(band) / Double(bandCount)
-            let hi = Double(band + 1) / Double(bandCount)
-            let start = Int(pow(Double(binCount), lo)) - 1
-            let end = Int(pow(Double(binCount), hi))
-            let range = max(0, min(start, binCount - 1))...max(0, min(max(end, start + 1), binCount - 1))
-            let slice = magnitudes[range]
-            let peak = slice.max() ?? 0
-            // Compress to something that reads well as bar height.
-            out[band] = min(1, sqrt(peak) * 0.55)
-        }
-        return out
+        Spectrum.foldIntoBands(magnitudes, bandCount: bandCount)
     }
 
     private func applySpectrum(_ bands: [Float]) {
-        guard bands.count == spectrum.count else { spectrum = bands; return }
-        // Fast attack, slow release — bars that fall instantly look like noise.
-        var smoothed = spectrum
-        for i in bands.indices {
-            smoothed[i] = bands[i] > smoothed[i]
-                ? bands[i]
-                : smoothed[i] * 0.82 + bands[i] * 0.18
-        }
-        spectrum = smoothed
+        spectrum = Spectrum.smooth(previous: spectrum, toward: bands)
     }
 }
 
@@ -582,3 +563,5 @@ public enum SourceResolver {
         }
     }
 }
+
+#endif

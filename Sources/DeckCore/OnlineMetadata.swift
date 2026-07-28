@@ -1,5 +1,10 @@
 import Foundation
 
+// On Linux, URLSession lives in a separate module from the rest of Foundation.
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 /// Metadata repair and artwork lookup against free, key-less services.
 ///
 ///  - **MusicBrainz** for canonical artist/album/track/year.

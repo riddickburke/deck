@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # The portable half of the codebase. ffmpeg is installed because several tests
+  # generate real audio files and probe them back.
+  core:
+    name: core · ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-22.04
+            image: swift:6.0-jammy
+          - name: ubuntu-24.04
+            image: swift:6.0-noble
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            ffmpeg pkg-config libgtk-4-dev
+
+      - name: Build DeckCore
+        run: swift build --target DeckCore -c release
+
+      - name: Run tests
+        run: swift run -c release DeckTests
+
+      - name: Build GTK front end
+        run: swift build --product deck -c release
+
+  macos:
+    name: macos
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+
+      - name: Build
+        run: swift build -c release
+
+      - name: Run tests
+        run: swift run -c release DeckTests
+
+      - name: Bundle app
+        run: ./build.sh release

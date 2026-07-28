@@ -1,5 +1,8 @@
-import AVFoundation
 import Foundation
+
+#if canImport(AVFoundation)
+import AVFoundation
+#endif
 
 /// Reads tags off disk. ffprobe is the primary reader because it understands Vorbis
 /// comments in FLAC/Ogg/Opus, which AVFoundation on macOS does not surface. AVAsset is
@@ -22,7 +25,13 @@ public enum MetadataReader {
         if Shell.has("ffprobe"), let track = await readViaFFprobe(url, size: size, modified: modified) {
             return track
         }
+        #if canImport(AVFoundation)
         return await readViaAVAsset(url, size: size, modified: modified)
+        #else
+        // On Linux ffprobe is the only reader, so a missing ffmpeg means no library.
+        // The UI surfaces this in settings rather than silently indexing nothing.
+        return nil
+        #endif
     }
 
     // MARK: - ffprobe
@@ -76,6 +85,7 @@ public enum MetadataReader {
 
     // MARK: - AVAsset fallback
 
+    #if canImport(AVFoundation)
     private static func readViaAVAsset(_ url: URL, size: Int64, modified: Date) async -> Track? {
         let asset = AVURLAsset(url: url)
         guard let duration = try? await asset.load(.duration) else { return nil }
@@ -131,6 +141,8 @@ public enum MetadataReader {
             modified: modified
         )
     }
+
+    #endif
 
     // MARK: - Parsing
 

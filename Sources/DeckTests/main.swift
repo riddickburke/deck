@@ -198,13 +198,25 @@ await T.test("album keys normalise surrounding whitespace") {
 T.suite("Spectrum folding")
 
 await T.test("folds FFT bins into normalised bands") {
-    let bands = Player.foldIntoBands((0..<512).map { Float($0) / 512 }, bandCount: 28)
+    let bands = Spectrum.foldIntoBands((0..<512).map { Float($0) / 512 }, bandCount: 28)
     T.equal(bands.count, 28)
     T.expect(bands.allSatisfy { $0 >= 0 && $0 <= 1 }, "bands must be normalised to 0...1")
 }
 
 await T.test("handles empty input without crashing") {
-    T.expect(Player.foldIntoBands([], bandCount: 28).isEmpty, "empty input should give no bands")
+    T.expect(Spectrum.foldIntoBands([], bandCount: 28).isEmpty, "empty input should give no bands")
+}
+
+await T.test("smoothing attacks instantly and releases gradually") {
+    let quiet = [Float](repeating: 0, count: 4)
+    let loud = [Float](repeating: 1, count: 4)
+
+    // A rising band jumps straight to the new level.
+    T.equal(Spectrum.smooth(previous: quiet, toward: loud), loud, "attack should be instant")
+
+    // A falling band decays rather than snapping to zero.
+    let decayed = Spectrum.smooth(previous: loud, toward: quiet)
+    T.expect(decayed.allSatisfy { $0 > 0 && $0 < 1 }, "release should be gradual, got \(decayed)")
 }
 
 // MARK: - Sync planning

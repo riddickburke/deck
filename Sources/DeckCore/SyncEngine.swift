@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 
 // MARK: - Plan
@@ -269,11 +268,10 @@ public actor SyncEngine {
                 guard let dir = Self.albumDirectory(for: key, in: plan) else { continue }
                 let cover = dir.appendingPathComponent("cover.jpg")
                 guard !fm.fileExists(atPath: cover.path) else { continue }
-                guard let data = await artworkFor(key),
-                      let image = NSImage(data: data),
-                      let resized = image.jpegData(maxDimension: config.deviceArtworkSize)
-                else { continue }
-                try? resized.write(to: cover, options: .atomic)
+                // The provider returns art already sized for the device, so the engine
+                // stays free of any platform imaging framework.
+                guard let data = await artworkFor(key), !data.isEmpty else { continue }
+                try? data.write(to: cover, options: .atomic)
             }
         }
 

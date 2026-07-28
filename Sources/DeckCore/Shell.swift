@@ -41,7 +41,12 @@ public enum Shell {
     /// explicitly rather than relying on PATH, because a GUI .app does not inherit the
     /// user's shell PATH.
     static let searchPaths = [
-        "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/opt/local/bin",
+        // macOS: Homebrew on Apple Silicon and Intel, then MacPorts.
+        "/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin",
+        // Linux distributions, plus Nix and Flatpak layouts.
+        "/usr/bin", "/bin", "/usr/local/sbin", "/usr/sbin",
+        "/var/lib/flatpak/exports/bin", "/run/current-system/sw/bin",
+        "/snap/bin",
     ]
 
     private static let cacheLock = NSLock()
@@ -67,10 +72,16 @@ public enum Shell {
 
     public static func has(_ tool: String) -> Bool { which(tool) != nil }
 
+    /// Runs `tool`, optionally feeding `input` to its stdin.
+    ///
+    /// stdin is written on its own queue while stdout and stderr are being drained.
+    /// Doing it inline would deadlock as soon as the input exceeds one pipe buffer:
+    /// we would block writing while the child blocks writing output nobody is reading.
     @discardableResult
     public static func run(
         _ tool: String,
         _ args: [String],
+        input: Data? = nil,
         onStderrLine: (@Sendable (String) -> Void)? = nil
     ) async throws -> ShellResult {
         guard let exe = which(tool) else { throw ShellError.notFound(tool) }
@@ -88,11 +99,33 @@ public enum Shell {
                 let outPipe = Pipe(), errPipe = Pipe()
                 process.standardOutput = outPipe
                 process.standardError = errPipe
-                // Without this a child that reads stdin inherits ours and can hang.
-                process.standardInput = FileHandle.nullDevice
+
+                let inPipe: Pipe?
+                if input != nil {
+                    let pipe = Pipe()
+                    inPipe = pipe
+                    process.standardInput = pipe
+                } else {
+                    inPipe = nil
+                    // Without this a child that reads stdin inherits ours and can hang.
+                    process.standardInput = FileHandle.nullDevice
+                }
 
                 let collected = Collected()
                 let group = DispatchGroup()
+
+                if let inPipe, let input {
+                    ioQueue.async {
+                        let writer = inPipe.fileHandleForWriting
+                        // A child that exits early (ffmpeg rejecting the input) leaves us
+                        // writing to a closed pipe; SIGPIPE would kill this process, so
+                        // the failure has to be swallowed rather than propagated.
+                        if !input.isEmpty {
+                            try? writer.write(contentsOf: input)
+                        }
+                        try? writer.close()
+                    }
+                }
 
                 group.enter()
                 ioQueue.async {
@@ -160,6 +193,17 @@ public enum Shell {
         let r = try await run(tool, args, onStderrLine: onStderrLine)
         guard r.ok else { throw ShellError.failed(tool, r.status, r.stderr) }
         return r
+    }
+
+    /// Convenience for filters that read stdin and write stdout, such as ffmpeg
+    /// operating on image bytes we already hold in memory.
+    @discardableResult
+    public static func runWithInput(
+        _ tool: String,
+        _ args: [String],
+        input: Data
+    ) async throws -> ShellResult {
+        try await run(tool, args, input: input)
     }
 }
 

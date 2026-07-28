@@ -367,8 +367,8 @@ final class AppState: ObservableObject {
                     // matches what is on screen.
                     guard let album = await MainActor.run(body: { self.album(for: key) })
                     else { return nil }
-                    guard let image = await ArtworkStore.shared.artwork(for: album) else { return nil }
-                    return image.jpegData(maxDimension: currentConfig.deviceArtworkSize)
+                    return await ArtworkStore.shared.deviceArtwork(
+                        for: album, maxDimension: currentConfig.deviceArtworkSize)
                 },
                 progress: { progress in
                     Task { @MainActor in self.syncProgress = progress }

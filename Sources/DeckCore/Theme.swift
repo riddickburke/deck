@@ -1,32 +1,80 @@
-import SwiftUI
+import Foundation
 
+#if canImport(SwiftUI)
+import SwiftUI
+#endif
 #if canImport(AppKit)
 import AppKit
 #endif
+
+/// A colour role expressed in a way every front end can consume: the source hex for CSS,
+/// and normalised components for anything that needs to draw or blend.
+public struct RGB: Equatable, Sendable {
+    public let r: Double
+    public let g: Double
+    public let b: Double
+    /// The original `#rrggbb`, kept verbatim so GTK CSS and terminal escapes agree
+    /// exactly with what the macOS renderer shows.
+    public let hex: String
+
+    public init(_ hex: String) {
+        let s = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
+        var v: UInt64 = 0
+        Scanner(string: s).scanHexInt64(&v)
+        r = Double((v >> 16) & 0xff) / 255
+        g = Double((v >> 8) & 0xff) / 255
+        b = Double(v & 0xff) / 255
+        self.hex = "#" + s.lowercased()
+    }
+
+    public var bytes: (UInt8, UInt8, UInt8) {
+        (UInt8(r * 255), UInt8(g * 255), UInt8(b * 255))
+    }
+
+    /// 24-bit ANSI foreground escape, for terminal output.
+    public var ansiForeground: String {
+        let (r, g, b) = bytes
+        return "\u{1B}[38;2;\(r);\(g);\(b)m"
+    }
+
+    public var ansiBackground: String {
+        let (r, g, b) = bytes
+        return "\u{1B}[48;2;\(r);\(g);\(b)m"
+    }
+
+    public func mixed(with other: RGB, amount: Double) -> RGB {
+        let t = max(0, min(1, amount))
+        let mix = { (a: Double, b: Double) in a + (b - a) * t }
+        let value = String(
+            format: "#%02x%02x%02x",
+            Int(mix(r, other.r) * 255), Int(mix(g, other.g) * 255), Int(mix(b, other.b) * 255))
+        return RGB(value)
+    }
+}
+
+/// The portable half of a theme: named colour roles, no UI framework involved.
+public struct Palette: Equatable, Sendable {
+    public let bg: RGB
+    public let bgAlt: RGB
+    public let bgInset: RGB
+    public let fg: RGB
+    public let muted: RGB
+    public let border: RGB
+    public let selection: RGB
+    public let accent: RGB
+    public let green: RGB
+    public let yellow: RGB
+    public let red: RGB
+    public let magenta: RGB
+    public let cyan: RGB
+}
 
 /// A theme is a struct of named colour *roles*, never literal colours at the call site.
 /// Styles are constructed from the active theme at render time so switching is live.
 public struct Theme: Identifiable, Equatable, Sendable {
     public let id: String
     public let name: String
-
-    public let bg: Color
-    public let bgAlt: Color
-    public let bgInset: Color
-    public let fg: Color
-    public let muted: Color
-    public let border: Color
-    public let selection: Color
-
-    public let accent: Color
-    public let green: Color
-    public let yellow: Color
-    public let red: Color
-    public let magenta: Color
-    public let cyan: Color
-
-    /// Dominant colour used behind album hero headers when art has no usable colour.
-    public var heroFallback: Color { accent }
+    public let palette: Palette
 
     public init(
         id: String, name: String,
@@ -36,21 +84,52 @@ public struct Theme: Identifiable, Equatable, Sendable {
     ) {
         self.id = id
         self.name = name
-        self.bg = Color(hex: bg)
-        self.bgAlt = Color(hex: bgAlt)
-        self.bgInset = Color(hex: bgInset)
-        self.fg = Color(hex: fg)
-        self.muted = Color(hex: muted)
-        self.border = Color(hex: border)
-        self.selection = Color(hex: selection)
-        self.accent = Color(hex: accent)
-        self.green = Color(hex: green)
-        self.yellow = Color(hex: yellow)
-        self.red = Color(hex: red)
-        self.magenta = Color(hex: magenta)
-        self.cyan = Color(hex: cyan)
+        self.palette = Palette(
+            bg: RGB(bg), bgAlt: RGB(bgAlt), bgInset: RGB(bgInset), fg: RGB(fg),
+            muted: RGB(muted), border: RGB(border), selection: RGB(selection),
+            accent: RGB(accent), green: RGB(green), yellow: RGB(yellow),
+            red: RGB(red), magenta: RGB(magenta), cyan: RGB(cyan))
     }
 }
+
+// MARK: - SwiftUI bridge
+//
+// Exposed as computed properties so existing call sites keep reading `theme.accent`
+// unchanged. Building a Color is cheap, and the original design already constructed
+// styles at render time rather than caching them, so theme switching stays live.
+
+#if canImport(SwiftUI)
+public extension Theme {
+    var bg: Color { Color(rgb: palette.bg) }
+    var bgAlt: Color { Color(rgb: palette.bgAlt) }
+    var bgInset: Color { Color(rgb: palette.bgInset) }
+    var fg: Color { Color(rgb: palette.fg) }
+    var muted: Color { Color(rgb: palette.muted) }
+    var border: Color { Color(rgb: palette.border) }
+    var selection: Color { Color(rgb: palette.selection) }
+    var accent: Color { Color(rgb: palette.accent) }
+    var green: Color { Color(rgb: palette.green) }
+    var yellow: Color { Color(rgb: palette.yellow) }
+    var red: Color { Color(rgb: palette.red) }
+    var magenta: Color { Color(rgb: palette.magenta) }
+    var cyan: Color { Color(rgb: palette.cyan) }
+
+    /// Dominant colour used behind album hero headers when art has no usable colour.
+    var heroFallback: Color { accent }
+}
+
+public extension Color {
+    init(rgb: RGB) {
+        self.init(.sRGB, red: rgb.r, green: rgb.g, blue: rgb.b, opacity: 1)
+    }
+
+    init(hex: String) {
+        self.init(rgb: RGB(hex))
+    }
+}
+#endif
+
+// MARK: - Palettes
 
 public extension Theme {
     /// The default. Deliberately plain: neutral greys, one soft accent, colour reserved
@@ -190,29 +269,9 @@ public extension Theme {
     }
 }
 
-public extension Color {
-    init(hex: String) {
-        let s = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-        var v: UInt64 = 0
-        Scanner(string: s).scanHexInt64(&v)
-        let r, g, b, a: Double
-        if s.count == 8 {
-            r = Double((v >> 24) & 0xff) / 255
-            g = Double((v >> 16) & 0xff) / 255
-            b = Double((v >> 8) & 0xff) / 255
-            a = Double(v & 0xff) / 255
-        } else {
-            r = Double((v >> 16) & 0xff) / 255
-            g = Double((v >> 8) & 0xff) / 255
-            b = Double(v & 0xff) / 255
-            a = 1
-        }
-        self.init(.sRGB, red: r, green: g, blue: b, opacity: a)
-    }
-}
-
 // MARK: - Typography
 
+#if canImport(SwiftUI)
 public enum DeckFont {
     /// Preferred in order; falls back to the system monospace if none are installed.
     /// JetBrains Mono is the spec font, but shipping without it must still look right.
@@ -243,5 +302,20 @@ public enum DeckFont {
         }
         #endif
         return mono(size, weight: .semibold)
+    }
+}
+#endif
+
+/// Font stack for front ends that take a family name rather than a Font object
+/// (GTK CSS, terminal config). Same intent as DeckFont, expressed portably.
+public enum FontStack {
+    public static let monospace = [
+        "JetBrains Mono", "Berkeley Mono", "IBM Plex Mono", "SF Mono",
+        "DejaVu Sans Mono", "Liberation Mono", "Menlo", "monospace",
+    ]
+
+    /// A CSS `font-family` value.
+    public static var cssFamily: String {
+        monospace.map { $0.contains(" ") ? "\"\($0)\"" : $0 }.joined(separator: ", ")
     }
 }
