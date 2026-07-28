@@ -1,6 +1,10 @@
-import AVFoundation
 import DeckCore
 import Foundation
+
+// SourceResolver and AVAudioFile are part of the Apple-only playback path.
+#if canImport(AVFoundation)
+import AVFoundation
+#endif
 
 // MARK: - Helpers
 
@@ -493,6 +497,8 @@ if !Shell.has("ffmpeg") {
         T.equal(tracks[0].codec, "mp3")
     }
 
+    #if canImport(AVFoundation)
+    // Decode-path tests: SourceResolver only exists where AVAudioEngine does.
     await T.test("native formats play straight from disk") {
         // No decode step for anything Core Audio already understands.
         for ext in ["mp3", "flac", "m4a", "wav", "aiff"] {
@@ -535,6 +541,10 @@ if !Shell.has("ffmpeg") {
         let again = try await SourceResolver.playableURL(for: track)
         T.equal(again.path, playable.path, "decode should be cached across calls")
     }
+    #else
+    T.skip("native formats play straight from disk", "apple-only decode path")
+    T.skip("opus decodes to something AVAudioFile can open", "apple-only decode path")
+    #endif
 
     await T.test("playlist reaches the device in playlist order, not sorted order") {
         // The order is deliberately scrambled against every other order the code could
