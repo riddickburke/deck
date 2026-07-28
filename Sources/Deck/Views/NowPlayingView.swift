@@ -31,7 +31,7 @@ struct NowPlayingView: View {
 
                         VStack(alignment: .leading, spacing: 14) {
                             trackInfo
-                            BigSpectrum(bands: player.spectrum, height: 96)
+                            spectrumPanel
                             scrubber
                             transport
                             details
@@ -136,6 +136,32 @@ struct NowPlayingView: View {
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .overlay(Rectangle().strokeBorder(color.opacity(0.45), lineWidth: 1))
+    }
+
+    /// The visualiser, or an explanation of why there is nothing to show.
+    private var spectrumPanel: some View {
+        Group {
+            if app.hasSpectrumSignal {
+                BigSpectrum(bands: app.spectrum, height: 96)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    // A flat meter would read as a bug. Say what is actually happening.
+                    HStack(spacing: 2) {
+                        ForEach(0..<Spectrum.bandCount, id: \.self) { _ in
+                            Rectangle()
+                                .fill(app.theme.border)
+                                .frame(height: 2)
+                        }
+                    }
+                    .frame(height: 2)
+
+                    Text("no signal · audio is playing in \(app.playbackHostName ?? "another app")")
+                        .font(DeckFont.mono(9))
+                        .foregroundStyle(app.theme.muted)
+                }
+                .frame(height: 96, alignment: .center)
+            }
+        }
     }
 
     // MARK: Transport

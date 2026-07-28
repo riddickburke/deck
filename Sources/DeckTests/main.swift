@@ -201,14 +201,78 @@ await T.test("album keys normalise surrounding whitespace") {
 
 T.suite("Spectrum folding")
 
-await T.test("folds FFT bins into normalised bands") {
-    let bands = Spectrum.foldIntoBands((0..<512).map { Float($0) / 512 }, bandCount: 28)
+let testScaling = Spectrum.Scaling(reference: 256, floorDecibels: -78, ceilingDecibels: -22)
+
+await T.test("folds FFT bins into the requested number of bands") {
+    let bands = Spectrum.foldIntoBands(
+        (0..<512).map { Float($0) / 512 }, bandCount: 28, scaling: testScaling)
     T.equal(bands.count, 28)
-    T.expect(bands.allSatisfy { $0 >= 0 && $0 <= 1 }, "bands must be normalised to 0...1")
+    T.expect(bands.allSatisfy { $0 >= 0 && $0 <= 1 }, "bands must stay within 0...1")
 }
 
 await T.test("handles empty input without crashing") {
-    T.expect(Spectrum.foldIntoBands([], bandCount: 28).isEmpty, "empty input should give no bands")
+    T.expect(
+        Spectrum.foldIntoBands([], bandCount: 28, scaling: testScaling).isEmpty,
+        "empty input should give no bands")
+}
+
+await T.test("silence reads as empty rather than as a floor of noise") {
+    let bands = Spectrum.foldIntoBands(
+        [Float](repeating: 0, count: 512), bandCount: 28, scaling: testScaling)
+    T.expect(bands.allSatisfy { $0 == 0 }, "silence must be flat, got \(bands.prefix(4))")
+}
+
+await T.test("a signal at the ceiling fills the bar, and one below it does not") {
+    // The old mapping was sqrt(magnitude) * 0.55 on raw vDSP output, where a full-scale
+    // tone peaks near 256 — that is 8.8, clamped to 1. Every bar sat at maximum for
+    // anything above silence, which is exactly the reported symptom.
+    //
+    // With reference 256 and a -22 dB ceiling, the bar fills at 256 * 10^(-22/20) ≈ 20.3.
+    T.equal(Spectrum.level(for: 256, scaling: testScaling), 1, "full scale is above the ceiling")
+    T.equal(Spectrum.level(for: 21, scaling: testScaling), 1, "at the ceiling the bar is full")
+
+    let midRange = Spectrum.level(for: 2, scaling: testScaling)
+    T.expect(midRange < 0.85, "20 dB under the ceiling should not be full, got \(midRange)")
+    T.expect(midRange > 0.15, "and should still be clearly visible, got \(midRange)")
+}
+
+await T.test("bar height rises monotonically across the operating range") {
+    // Steps inside the floor..ceiling window, roughly 12 dB apart.
+    let levels: [Float] = [0.05, 0.2, 0.8, 3, 12].map {
+        Spectrum.level(for: $0, scaling: testScaling)
+    }
+    for (a, b) in zip(levels, levels.dropFirst()) {
+        T.expect(b > a, "level must increase with magnitude: \(levels)")
+    }
+    T.expect(levels.first! < 0.3, "quietest step should sit low, got \(levels.first!)")
+    T.expect(levels.last! > 0.85, "loudest step should sit high, got \(levels.last!)")
+}
+
+await T.test("sensitivity lowers the ceiling so quieter material fills the bar") {
+    // Direction matters: a higher ceiling demands a louder signal. Inverting this is
+    // what pins every bar to the top.
+    let sensitive = Spectrum.Scaling.forSensitivity(1.0, fftSize: 1024)
+    let dull = Spectrum.Scaling.forSensitivity(0.0, fftSize: 1024)
+
+    T.expect(
+        sensitive.ceilingDecibels < dull.ceilingDecibels,
+        "more sensitive means a lower ceiling, got \(sensitive.ceilingDecibels) vs \(dull.ceilingDecibels)")
+    T.equal(sensitive.reference, 256, "reference is fftSize/4 for a Hann-windowed real FFT")
+
+    let magnitude: Float = 3
+    T.expect(
+        Spectrum.level(for: magnitude, scaling: sensitive)
+            > Spectrum.level(for: magnitude, scaling: dull),
+        "identical input should read higher on the sensitive setting")
+}
+
+await T.test("the shipped default does not saturate on ordinary material") {
+    // The reported bug: bars permanently at maximum. A band sitting around -30 dBFS,
+    // typical of real music, must land mid-scale rather than pinned.
+    let scaling = Spectrum.Scaling.forSensitivity(0.35, fftSize: 1024)
+    let typical = Spectrum.level(for: 256 * pow(10, -30 / 20), scaling: scaling)
+    T.expect(typical < 0.9, "a -30 dB band should not be full, got \(typical)")
+    T.expect(typical > 0.1, "a -30 dB band should still register, got \(typical)")
 }
 
 await T.test("smoothing attacks instantly and releases gradually") {

@@ -92,6 +92,9 @@ final class AppState: ObservableObject {
             config.save()
             if config.themeID != oldValue.themeID { theme = Theme.named(config.themeID) }
             if config.volume != oldValue.volume { player.volume = config.volume }
+            if config.spectrumSensitivity != oldValue.spectrumSensitivity {
+                player.spectrumSensitivity = config.resolvedSpectrumSensitivity
+            }
         }
     }
     @Published var theme: Theme
@@ -119,6 +122,7 @@ final class AppState: ObservableObject {
         player.volume = loaded.volume
         player.shuffle = loaded.shuffle
         player.repeatMode = loaded.repeatMode
+        player.spectrumSensitivity = loaded.resolvedSpectrumSensitivity
 
         // System media keys and the Control Centre tile.
         mediaRemote = MediaRemote(player: player)
@@ -499,6 +503,25 @@ final class AppState: ObservableObject {
     private var remoteTimer: Timer?
 
     var isRemoteActive: Bool { activeBackend != .local }
+
+    /// The spectrum is tapped from our own audio engine. When a service is doing the
+    /// playing, the audio never passes through this process, so there is nothing to
+    /// analyse — that has to be said rather than drawn as a flat, broken-looking meter.
+    var hasSpectrumSignal: Bool { !isRemoteActive }
+
+    /// Where the audio is actually coming out, for the visualiser's empty state.
+    var playbackHostName: String? {
+        switch activeBackend {
+        case .local: return nil
+        case .appleMusic: return "Music.app"
+        case .spotify: return spotifyDeviceName ?? "Spotify"
+        }
+    }
+
+    /// Live bars, or a flat set while a service is playing.
+    var spectrum: [Float] {
+        hasSpectrumSignal ? player.spectrum : Array(repeating: 0, count: Spectrum.bandCount)
+    }
 
     // Unified transport, so views do not have to know which engine is playing.
     var currentTrack: Track? { isRemoteActive ? remoteTrack : player.currentTrack }

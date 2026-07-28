@@ -41,7 +41,10 @@ public final class Player: ObservableObject {
         didSet { applyEQ() }
     }
 
-    public static let bandCount = 28
+    public static let bandCount = Spectrum.bandCount
+
+    /// Visualiser sensitivity, 0...1. Read once when the tap is installed.
+    public var spectrumSensitivity: Double = 0.35
     public static let eqFrequencies: [Float] = [
         32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000,
     ]
@@ -417,6 +420,9 @@ public final class Player: ObservableObject {
     private func installSpectrumTap() {
         let mixer = engine.mainMixerNode
         let fftSize = 1024
+        // Captured once: the tap runs on the audio thread and must not read
+        // main-actor state.
+        let sensitivity = spectrumSensitivity
         guard let fft = vDSP.FFT(log2n: 10, radix: .radix2, ofType: DSPSplitComplex.self) else { return }
 
         mixer.installTap(onBus: 0, bufferSize: AVAudioFrameCount(fftSize), format: nil) {
@@ -447,15 +453,13 @@ public final class Player: ObservableObject {
                 }
             }
 
-            let bands = Self.foldIntoBands(magnitudes, bandCount: Self.bandCount)
+            let bands = Spectrum.foldIntoBands(
+                magnitudes, bandCount: Self.bandCount,
+                scaling: Spectrum.Scaling.forSensitivity(sensitivity, fftSize: fftSize))
             Task { @MainActor [weak self] in self?.applySpectrum(bands) }
         }
     }
 
-    /// Retained so existing call sites keep working; the implementation is portable.
-    public static func foldIntoBands(_ magnitudes: [Float], bandCount: Int) -> [Float] {
-        Spectrum.foldIntoBands(magnitudes, bandCount: bandCount)
-    }
 
     private func applySpectrum(_ bands: [Float]) {
         spectrum = Spectrum.smooth(previous: spectrum, toward: bands)

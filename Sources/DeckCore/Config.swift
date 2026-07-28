@@ -21,6 +21,8 @@ public struct Config: Codable, Equatable, Sendable {
     /// Spotify application client ID. The user registers their own; there is no secret,
     /// because PKCE does not need one and a secret in a shipped binary is not a secret.
     public var spotifyClientID: String?
+    /// Visualiser sensitivity, 0...1. Lower needs louder material to fill a bar.
+    public var spectrumSensitivity: Double?
 
     public enum RepeatMode: String, Codable, CaseIterable, Sendable {
         case off, all, one
@@ -46,7 +48,8 @@ public struct Config: Codable, Equatable, Sendable {
         writeDeviceArtwork: true,
         deviceArtworkSize: 500,
         onlineLookupEnabled: true,
-        spotifyClientID: nil
+        spotifyClientID: nil,
+        spectrumSensitivity: 0.35
     )
 
     // MARK: - Paths
@@ -190,6 +193,11 @@ public struct Config: Codable, Equatable, Sendable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(self) else { return }
         try? data.write(to: Config.configURL, options: .atomic)
+    }
+
+    /// Defaulted here rather than at the property so an older config still decodes.
+    public var resolvedSpectrumSensitivity: Double {
+        spectrumSensitivity ?? 0.35
     }
 
     public var rootURLs: [URL] {

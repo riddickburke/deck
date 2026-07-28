@@ -23,7 +23,7 @@ struct NowPlayingBar: View {
                 .frame(maxWidth: .infinity)
 
                 HStack(spacing: 14) {
-                    SpectrumView(bands: player.spectrum)
+                    SpectrumView(bands: app.spectrum)
                     volumeControl
                 }
                 .frame(width: 250, alignment: .trailing)
@@ -198,6 +198,7 @@ struct SpectrumView: View {
 
     /// Green through yellow to red as bands approach clipping.
     private func color(for level: Float) -> Color {
+        if !app.hasSpectrumSignal { return app.theme.muted.opacity(0.25) }
         if level > 0.82 { return app.theme.red }
         if level > 0.6 { return app.theme.yellow }
         if level > 0.05 { return app.theme.accent }

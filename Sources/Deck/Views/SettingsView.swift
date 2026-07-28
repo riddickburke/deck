@@ -12,6 +12,7 @@ struct SettingsView: View {
                 librarySection
                 themeSection
                 eqSection
+                visualiserSection
                 metadataSection
                 streamingSection
                 toolingSection
@@ -167,6 +168,44 @@ struct SettingsView: View {
             .padding(10)
             .background(app.theme.bgInset)
             .overlay(Rectangle().strokeBorder(app.theme.border, lineWidth: 1))
+        }
+    }
+
+    private var visualiserSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "visualiser")
+
+            HStack(spacing: 10) {
+                Text("sensitivity")
+                    .font(DeckFont.mono(10))
+                    .foregroundStyle(app.theme.muted)
+                Slider(
+                    value: Binding(
+                        get: { app.config.resolvedSpectrumSensitivity },
+                        set: { app.config.spectrumSensitivity = $0 }),
+                    in: 0...1)
+                    .frame(width: 200)
+                Text(String(format: "%.2f", app.config.resolvedSpectrumSensitivity))
+                    .font(DeckFont.mono(10))
+                    .foregroundStyle(app.theme.fg)
+                BracketButton(label: "default", compact: true) {
+                    app.config.spectrumSensitivity = 0.35
+                }
+            }
+
+            let scaling = Spectrum.Scaling.forSensitivity(
+                app.config.resolvedSpectrumSensitivity, fftSize: 1024)
+            Text(String(
+                format: "bars fill at %.0f dBFS and empty at %.0f dBFS. higher sensitivity fills on quieter material.",
+                scaling.ceilingDecibels, scaling.floorDecibels))
+                .font(DeckFont.mono(9))
+                .foregroundStyle(app.theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("the visualiser analyses audio played by deck itself. while apple music or spotify is playing, the audio never passes through this process and there is nothing to analyse.")
+                .font(DeckFont.mono(9))
+                .foregroundStyle(app.theme.muted.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
