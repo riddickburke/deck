@@ -12,6 +12,8 @@ enum Route: Hashable {
     case queue
     case sync
     case settings
+    /// Picker for choosing a streaming service.
+    case streaming
 }
 
 enum Pane: Hashable { case sidebar, content }
@@ -34,6 +36,8 @@ final class AppState: ObservableObject {
 
     @Published var route: Route = .albums
     @Published var history: [Route] = []
+    /// Routes popped by Back, so Forward can replay them.
+    @Published var future: [Route] = []
     @Published var focusedPane: Pane = .content
     @Published var selectionIndex = 0
 
@@ -41,6 +45,8 @@ final class AppState: ObservableObject {
 
     @Published var searchQuery = ""
     @Published var isSearching = false
+    /// Bumped to move keyboard focus into the toolbar search field.
+    @Published var searchFocusTrigger = 0
     @Published var showCommandPalette = false
     @Published var showNowPlaying = false
     @Published var statusMessage: String?
@@ -868,14 +874,54 @@ final class AppState: ObservableObject {
 
     // MARK: - Navigation
 
+    var canGoBack: Bool { !history.isEmpty }
+    var canGoForward: Bool { !future.isEmpty }
+
     func navigate(to newRoute: Route) {
+        guard newRoute != route else { return }
         history.append(route)
+        // A new destination invalidates anything that was ahead, the way a browser does.
+        future.removeAll()
         route = newRoute
         selectionIndex = 0
     }
 
+    func goForward() {
+        guard let next = future.popLast() else { return }
+        history.append(route)
+        route = next
+        selectionIndex = 0
+    }
+
+    // MARK: Streaming mode
+
+    /// True while the browser is pinned to a single streaming service.
+    var isStreamingMode: Bool { sourceFilter?.isStreaming == true }
+
+    /// Shows only that service's library. Local files are hidden entirely, which is the
+    /// point: streaming and owned music are different mental modes.
+    func enterStreamingMode(_ source: TrackSource) {
+        sourceFilter = source
+        searchQuery = ""
+        navigate(to: .albums)
+
+        // Pull the library on first entry so the page is not empty.
+        switch source {
+        case .appleMusic where appleMusicTracks.isEmpty: importAppleMusic()
+        case .spotify where spotifyTracks.isEmpty && spotify.isAuthorized: importSpotify()
+        default: break
+        }
+    }
+
+    func exitStreamingMode() {
+        sourceFilter = .local
+        searchQuery = ""
+        navigate(to: .albums)
+    }
+
     func goBack() {
         guard let previous = history.popLast() else { return }
+        future.append(route)
         route = previous
         selectionIndex = 0
     }

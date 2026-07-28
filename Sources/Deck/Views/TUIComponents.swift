@@ -129,6 +129,9 @@ struct TUITextField: View {
     var onSubmit: () -> Void = {}
     var onCancel: () -> Void = {}
     var focusOnAppear: Bool = false
+    /// Incremented by the owner to pull focus here — used by the `/` key, which has to
+    /// focus a field it does not own.
+    var focusTrigger: Int = 0
 
     @EnvironmentObject var app: AppState
     @FocusState private var focused: Bool
@@ -154,6 +157,7 @@ struct TUITextField: View {
                 app.setTextInputFocused(isFocused)
             }
             .onAppear { if focusOnAppear { focused = true } }
+            .onChange(of: focusTrigger) { _, _ in focused = true }
             .onDisappear {
                 // A field removed while focused never reports losing focus, which would
                 // otherwise leave the keyboard permanently in "typing" mode.

@@ -267,13 +267,13 @@ struct StatusBar: View {
     }
 
     private var modeLabel: String {
-        if app.isSearching { return "SEARCH" }
+        if app.textInputFocused { return "SEARCH" }
         if app.showCommandPalette { return "COMMAND" }
         return "NORMAL"
     }
 
     private var modeColor: Color {
-        if app.isSearching { return app.theme.yellow }
+        if app.textInputFocused { return app.theme.yellow }
         if app.showCommandPalette { return app.theme.magenta }
         return app.theme.accent
     }
@@ -289,6 +289,7 @@ struct StatusBar: View {
         case .queue: return "queue (\(player.queue.count))"
         case .sync: return "sync"
         case .settings: return "settings"
+        case .streaming: return "streaming"
         }
     }
 

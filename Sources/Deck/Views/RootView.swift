@@ -4,7 +4,6 @@ import SwiftUI
 struct RootView: View {
     @EnvironmentObject var app: AppState
     @FocusState private var keyboardFocused: Bool
-    @FocusState private var searchFocused: Bool
     /// Set after `g`, so `gg` can act as a chord without a modifier.
     @State private var pendingG = false
 
@@ -13,10 +12,7 @@ struct RootView: View {
             app.theme.bg.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                TUITitlebar(
-                    title: "deck",
-                    focused: true,
-                    trailing: app.selectedDevice.map { "device: \($0.volumeName)" } ?? "no device")
+                topBar
 
                 HStack(spacing: 0) {
                     SidebarView()
@@ -49,6 +45,104 @@ struct RootView: View {
         .onKeyPress(phases: .down) { press in handle(press) }
     }
 
+    // MARK: - Top bar
+
+    private var topBar: some View {
+        HStack(spacing: 10) {
+            Rectangle()
+                .fill(app.theme.accent)
+                .frame(width: 2, height: 12)
+            Text("deck")
+                .font(DeckFont.mono(11))
+                .foregroundStyle(app.theme.fg)
+
+            // History controls, dimmed when there is nowhere to go.
+            HStack(spacing: 2) {
+                BracketButton(label: "←", disabled: !app.canGoBack, compact: true) {
+                    app.goBack()
+                }
+                BracketButton(label: "→", disabled: !app.canGoForward, compact: true) {
+                    app.goForward()
+                }
+            }
+
+            topBarSearch
+
+            BracketButton(
+                label: app.isStreamingMode ? "◆ streaming" : "streaming",
+                tint: app.isStreamingMode ? app.theme.magenta : nil,
+                compact: true
+            ) { app.navigate(to: .streaming) }
+
+            if app.isStreamingMode {
+                BracketButton(label: "local", compact: true) { app.exitStreamingMode() }
+            }
+
+            Spacer(minLength: 8)
+
+            Text(scopeLabel)
+                .font(DeckFont.mono(9))
+                .foregroundStyle(app.isStreamingMode ? app.theme.magenta : app.theme.muted)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .background(app.theme.bgInset)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(app.theme.border).frame(height: 1)
+        }
+    }
+
+    /// Search lives in the toolbar and filters whatever the current source is, so the
+    /// same field covers local files and a streaming library without a mode switch.
+    private var topBarSearch: some View {
+        HStack(spacing: 5) {
+            Text("/")
+                .font(DeckFont.mono(11))
+                .foregroundStyle(app.searchQuery.isEmpty ? app.theme.muted : app.theme.yellow)
+
+            TUITextField(
+                placeholder: searchPlaceholder,
+                text: $app.searchQuery,
+                width: 220,
+                onSubmit: { keyboardFocused = true },
+                onCancel: {
+                    app.searchQuery = ""
+                    keyboardFocused = true
+                },
+                focusTrigger: app.searchFocusTrigger)
+
+            if !app.searchQuery.isEmpty {
+                BracketButton(label: "×", compact: true) {
+                    app.searchQuery = ""
+                }
+                Text("\(app.filteredAlbums.count)a \(app.filteredTracks.count)t")
+                    .font(DeckFont.mono(9))
+                    .foregroundStyle(app.theme.muted)
+            }
+        }
+    }
+
+    private var searchPlaceholder: String {
+        switch app.sourceFilter {
+        case .appleMusic: return "search apple music"
+        case .spotify: return "search spotify"
+        case .local: return "search local library"
+        case nil: return "search everything"
+        }
+    }
+
+    private var scopeLabel: String {
+        let scope: String
+        switch app.sourceFilter {
+        case .appleMusic: scope = "apple music"
+        case .spotify: scope = "spotify"
+        case .local: scope = "local"
+        case nil: scope = "all sources"
+        }
+        let device = app.selectedDevice.map { " · \($0.volumeName)" } ?? ""
+        return scope + device
+    }
+
     // MARK: - Content
 
     private var contentPanel: some View {
@@ -57,10 +151,7 @@ struct RootView: View {
             focused: app.focusedPane == .content,
             trailing: app.isSearching ? nil : "\(itemCount) items"
         ) {
-            VStack(spacing: 0) {
-                if app.isSearching { searchField }
-                content
-            }
+            VStack(spacing: 0) { content }
         }
         .onTapGesture { app.focusedPane = .content }
     }
@@ -90,6 +181,8 @@ struct RootView: View {
             SyncView()
         case .settings:
             SettingsView()
+        case .streaming:
+            StreamingView()
         }
     }
 
@@ -104,6 +197,7 @@ struct RootView: View {
         case .queue: return "deck://queue"
         case .sync: return "deck://sync"
         case .settings: return "deck://settings"
+        case .streaming: return "deck://streaming"
         }
     }
 
@@ -178,7 +272,7 @@ struct RootView: View {
         case .artist(let name): return app.albums(for: name).count
         case .playlist(let id): return app.playlist(id).map { app.tracks(in: $0).count } ?? 0
         case .queue: return app.player.queue.count
-        case .sync, .settings: return 0
+        case .sync, .settings, .streaming: return 0
         }
     }
 
@@ -226,7 +320,7 @@ struct RootView: View {
         case "G": app.selectionIndex = max(0, itemCount - 1)
         case "h": app.goBack()
         case "l": activateSelection()
-        case "/": app.isSearching = true
+        case "/": app.searchFocusTrigger += 1
         case ":": app.showCommandPalette = true
         case "n": app.nextTrack()
         case "p": app.previousTrack()
@@ -243,6 +337,9 @@ struct RootView: View {
         case "3": app.navigate(to: .songs)
         case "4": app.navigate(to: .queue)
         case "S": app.navigate(to: .sync)
+        case "M": app.navigate(to: .streaming)
+        case "[": app.goBack()
+        case "]": app.goForward()
         case ",": app.navigate(to: .settings)
         case "R": app.scanLibrary()
         case "?": app.showCommandPalette = true
@@ -289,7 +386,7 @@ struct RootView: View {
             app.play(tracks: app.tracks(in: playlist), startingAt: index)
         case .queue:
             app.player.playTrack(at: index)
-        case .sync, .settings:
+        case .sync, .settings, .streaming:
             break
         }
     }
