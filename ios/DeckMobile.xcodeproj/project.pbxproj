@@ -1,0 +1,321 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		533272F5CE52EE08FB1ACB85 /* DeckMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9054F5817A1A7FB5952DE56B /* DeckMobileApp.swift */; };
+		0DBB49A4A08C618531180107 /* MobileState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547ACBEAC3322E72D5266448 /* MobileState.swift */; };
+		137ECB103C37B94A8DD69793 /* MusicLibrary.swift in Sources */ = {isa = PBXBuildFile; fileRef = 336EFE5A4B82D04B3A1865E4 /* MusicLibrary.swift */; };
+		8E0C17C63A66425F93C8D932 /* Playback.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0A3BB036B732775642351E2 /* Playback.swift */; };
+		ABBA14BCCD525B1E315CC032 /* LibraryPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F48900D33C5175184BE992E /* LibraryPages.swift */; };
+		2E41304E4FF5BF1186B53D77 /* NowPlaying.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AB332F77C39757100A137E4 /* NowPlaying.swift */; };
+		7F2083E388A7BF50E4CAC186 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 061C677EFA7A74C7E6886604 /* RootView.swift */; };
+		BB4775CFC0ED8CAFA53985A6 /* SearchPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05E0695F2FBE7B20E040B9A2 /* SearchPage.swift */; };
+		9C0B01D25CAA77CE9AE3608E /* SettingsPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B0324D23ACAD564E8C3971F /* SettingsPage.swift */; };
+		D31315CF4CCD61CC118405E9 /* TUIKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADBB3F35C2DD2431AC8F4E85 /* TUIKit.swift */; };
+		E1A65EB3977E7B11C58712BD /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DDD04D2E7680EC01C0F7196 /* Models.swift */; };
+		F6EA1989C99B9BA5703338F1 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 238A212050CAA5F0B3DF78A6 /* Theme.swift */; };
+		3CF1D6DF7980A579C6AC7FC7 /* Spectrum.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09C419BE2A9B0B94D7C2A165 /* Spectrum.swift */; };
+		521338F46396925CF5346F20 /* SyntheticSpectrum.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C0CF53D021D5A09C9C0D779 /* SyntheticSpectrum.swift */; };
+		5774618C7F0F3FC5C77CF4DF /* ServicePlaylist.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FCF7AC163C37148710EAEF3 /* ServicePlaylist.swift */; };
+		3831E32BC240DA716CA3C362 /* MediaPlayer.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7513A58929833DF7C48BB1AE /* MediaPlayer.framework */; };
+		928CDF4049ABD9B44C5FF250 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 288DC7B9B24D689DBADBA049 /* AVFoundation.framework */; };
+		492B2F9060BC31612DE6B481 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 4CC3BDA09A27387A51E71C59 /* Assets.xcassets */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		9054F5817A1A7FB5952DE56B /* DeckMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DeckMobileApp.swift; path = "DeckMobile/DeckMobileApp.swift"; sourceTree = "<group>"; };
+		547ACBEAC3322E72D5266448 /* MobileState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MobileState.swift; path = "DeckMobile/MobileState.swift"; sourceTree = "<group>"; };
+		336EFE5A4B82D04B3A1865E4 /* MusicLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MusicLibrary.swift; path = "DeckMobile/MusicLibrary.swift"; sourceTree = "<group>"; };
+		B0A3BB036B732775642351E2 /* Playback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Playback.swift; path = "DeckMobile/Playback.swift"; sourceTree = "<group>"; };
+		1F48900D33C5175184BE992E /* LibraryPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LibraryPages.swift; path = "DeckMobile/Views/LibraryPages.swift"; sourceTree = "<group>"; };
+		0AB332F77C39757100A137E4 /* NowPlaying.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NowPlaying.swift; path = "DeckMobile/Views/NowPlaying.swift"; sourceTree = "<group>"; };
+		061C677EFA7A74C7E6886604 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = "DeckMobile/Views/RootView.swift"; sourceTree = "<group>"; };
+		05E0695F2FBE7B20E040B9A2 /* SearchPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SearchPage.swift; path = "DeckMobile/Views/SearchPage.swift"; sourceTree = "<group>"; };
+		2B0324D23ACAD564E8C3971F /* SettingsPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SettingsPage.swift; path = "DeckMobile/Views/SettingsPage.swift"; sourceTree = "<group>"; };
+		ADBB3F35C2DD2431AC8F4E85 /* TUIKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TUIKit.swift; path = "DeckMobile/Views/TUIKit.swift"; sourceTree = "<group>"; };
+		1DDD04D2E7680EC01C0F7196 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Models.swift; path = "../Sources/DeckCore/Models.swift"; sourceTree = "<group>"; };
+		238A212050CAA5F0B3DF78A6 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Theme.swift; path = "../Sources/DeckCore/Theme.swift"; sourceTree = "<group>"; };
+		09C419BE2A9B0B94D7C2A165 /* Spectrum.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Spectrum.swift; path = "../Sources/DeckCore/Spectrum.swift"; sourceTree = "<group>"; };
+		0C0CF53D021D5A09C9C0D779 /* SyntheticSpectrum.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SyntheticSpectrum.swift; path = "../Sources/DeckCore/SyntheticSpectrum.swift"; sourceTree = "<group>"; };
+		3FCF7AC163C37148710EAEF3 /* ServicePlaylist.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ServicePlaylist.swift; path = "../Sources/DeckCore/ServicePlaylist.swift"; sourceTree = "<group>"; };
+		7513A58929833DF7C48BB1AE /* MediaPlayer.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MediaPlayer.framework; path = System/Library/Frameworks/MediaPlayer.framework; sourceTree = SDKROOT; };
+		288DC7B9B24D689DBADBA049 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		4CC3BDA09A27387A51E71C59 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = "DeckMobile/Assets.xcassets"; sourceTree = "<group>"; };
+		27932FBB71A036F3187C22A3 /* DeckMobile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "DeckMobile.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		93BCF3CC9EB1AB4CD6EFAA60 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3831E32BC240DA716CA3C362 /* MediaPlayer.framework in Frameworks */,
+				928CDF4049ABD9B44C5FF250 /* AVFoundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		F570600CF69E4B928FC37F90 /* Deck */ = {
+			isa = PBXGroup;
+			children = (
+				E6AF13627E7DF31BFBB213A7 /* DeckMobile */,
+				EACBFA82A119EAC1F6893F39 /* DeckCore */,
+				4CC3BDA09A27387A51E71C59 /* Assets.xcassets */,
+				D0B5A9E6C64960446F7357ED /* Frameworks */,
+				AAD2FD9C911DD39F313E625F /* Products */,
+			);
+			name = Deck;
+			sourceTree = "<group>";
+		};
+		E6AF13627E7DF31BFBB213A7 /* DeckMobile */ = {
+			isa = PBXGroup;
+			children = (
+				9054F5817A1A7FB5952DE56B /* DeckMobileApp.swift */,
+				547ACBEAC3322E72D5266448 /* MobileState.swift */,
+				336EFE5A4B82D04B3A1865E4 /* MusicLibrary.swift */,
+				B0A3BB036B732775642351E2 /* Playback.swift */,
+				46C76E3711D7D06182832257 /* Views */,
+			);
+			name = DeckMobile;
+			sourceTree = "<group>";
+		};
+		46C76E3711D7D06182832257 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				1F48900D33C5175184BE992E /* LibraryPages.swift */,
+				0AB332F77C39757100A137E4 /* NowPlaying.swift */,
+				061C677EFA7A74C7E6886604 /* RootView.swift */,
+				05E0695F2FBE7B20E040B9A2 /* SearchPage.swift */,
+				2B0324D23ACAD564E8C3971F /* SettingsPage.swift */,
+				ADBB3F35C2DD2431AC8F4E85 /* TUIKit.swift */,
+			);
+			name = Views;
+			sourceTree = "<group>";
+		};
+		EACBFA82A119EAC1F6893F39 /* DeckCore */ = {
+			isa = PBXGroup;
+			children = (
+				1DDD04D2E7680EC01C0F7196 /* Models.swift */,
+				238A212050CAA5F0B3DF78A6 /* Theme.swift */,
+				09C419BE2A9B0B94D7C2A165 /* Spectrum.swift */,
+				0C0CF53D021D5A09C9C0D779 /* SyntheticSpectrum.swift */,
+				3FCF7AC163C37148710EAEF3 /* ServicePlaylist.swift */,
+			);
+			name = DeckCore;
+			sourceTree = "<group>";
+		};
+		D0B5A9E6C64960446F7357ED /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				7513A58929833DF7C48BB1AE /* MediaPlayer.framework */,
+				288DC7B9B24D689DBADBA049 /* AVFoundation.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		AAD2FD9C911DD39F313E625F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				27932FBB71A036F3187C22A3 /* DeckMobile.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		7AC3C4D315652F2D38B98204 /* DeckMobile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A5B0D939D6F5D51648C824C0;
+			buildPhases = (
+				81150296FCA56311C92F8795 /* Sources */,
+				93BCF3CC9EB1AB4CD6EFAA60 /* Frameworks */,
+				A032BB728F121E2ACD484A31 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = DeckMobile;
+			productName = DeckMobile;
+			productReference = 27932FBB71A036F3187C22A3 /* DeckMobile.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0467FEAC698B5695E9852A92 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					7AC3C4D315652F2D38B98204 = { CreatedOnToolsVersion = 26.6; };
+				};
+			};
+			buildConfigurationList = C173ABA55E0B7189320381DC;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = F570600CF69E4B928FC37F90;
+			productRefGroup = AAD2FD9C911DD39F313E625F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				7AC3C4D315652F2D38B98204 /* DeckMobile */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A032BB728F121E2ACD484A31 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				492B2F9060BC31612DE6B481 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		81150296FCA56311C92F8795 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				533272F5CE52EE08FB1ACB85 /* DeckMobileApp.swift in Sources */,
+				0DBB49A4A08C618531180107 /* MobileState.swift in Sources */,
+				137ECB103C37B94A8DD69793 /* MusicLibrary.swift in Sources */,
+				8E0C17C63A66425F93C8D932 /* Playback.swift in Sources */,
+				ABBA14BCCD525B1E315CC032 /* LibraryPages.swift in Sources */,
+				2E41304E4FF5BF1186B53D77 /* NowPlaying.swift in Sources */,
+				7F2083E388A7BF50E4CAC186 /* RootView.swift in Sources */,
+				BB4775CFC0ED8CAFA53985A6 /* SearchPage.swift in Sources */,
+				9C0B01D25CAA77CE9AE3608E /* SettingsPage.swift in Sources */,
+				D31315CF4CCD61CC118405E9 /* TUIKit.swift in Sources */,
+				E1A65EB3977E7B11C58712BD /* Models.swift in Sources */,
+				F6EA1989C99B9BA5703338F1 /* Theme.swift in Sources */,
+				3CF1D6DF7980A579C6AC7FC7 /* Spectrum.swift in Sources */,
+				521338F46396925CF5346F20 /* SyntheticSpectrum.swift in Sources */,
+				5774618C7F0F3FC5C77CF4DF /* ServicePlaylist.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		74EE7EDC24558D44ADA2490A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				ONLY_ACTIVE_ARCH = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		C05716756722C1B352637037 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_NO_COMMON_BLOCKS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		6FB2B0867810073131FE1665 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F4LTQQK7JP;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "DeckMobile/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.riddickburke.deckmobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Debug;
+		};
+		94B22F0101208870D656AF3B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = F4LTQQK7JP;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "DeckMobile/Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.riddickburke.deckmobile;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		C173ABA55E0B7189320381DC /* Build configuration list for PBXProject */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				74EE7EDC24558D44ADA2490A /* Debug */,
+				C05716756722C1B352637037 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A5B0D939D6F5D51648C824C0 /* Build configuration list for PBXNativeTarget */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6FB2B0867810073131FE1665 /* Debug */,
+				94B22F0101208870D656AF3B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0467FEAC698B5695E9852A92 /* Project object */;
+}

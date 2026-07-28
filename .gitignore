@@ -5,3 +5,12 @@ dist/
 .DS_Store
 .swiftpm/
 Package.resolved
+
+# Xcode per-user state — window positions and breakpoints, not project configuration.
+xcuserdata/
+*.xcuserstate
+
+# Rendered by Tools/make-ios-icon.swift at build time. Kept out of the repo for the
+# same reason as the macOS iconset: the icon is drawn procedurally, so committing the
+# output would mean two sources of truth for the same artwork.
+ios/DeckMobile/Assets.xcassets/AppIcon.appiconset/AppIcon.png
