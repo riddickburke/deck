@@ -16,6 +16,10 @@ struct DeckApp: App {
         if CommandLine.arguments.contains("--apple-music") {
             AppleMusicProbe.run()
         }
+        // `deck --check-update` asks GitHub whether a newer release exists.
+        if CommandLine.arguments.contains("--check-update") {
+            UpdateProbe.run()
+        }
     }
 
     var body: some Scene {

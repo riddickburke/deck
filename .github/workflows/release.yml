@@ -96,7 +96,12 @@ jobs:
       - name: Collect
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' \) \
+          # .dmg is included so that a macOS build, if one is ever produced by this
+          # workflow, lands in SHA256SUMS. Today the disk image is built and uploaded by
+          # hand, so it is absent from the checksums file — the in-app updater treats a
+          # missing entry as "cannot verify" and proceeds, rather than refusing to update.
+          find artifacts -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.tar.gz' -o -name '*.dmg' \) \
             -exec cp {} release/ \;
           cd release && sha256sum * > SHA256SUMS
           ls -la

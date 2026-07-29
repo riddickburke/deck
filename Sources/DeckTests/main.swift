@@ -1127,4 +1127,167 @@ do {
     }
 }
 
+// MARK: - Updates
+
+T.suite("update checking")
+
+do {
+    func releaseJSON(
+        tag: String, assets: [String], prerelease: Bool = false, draft: Bool = false
+    ) -> Data {
+        let assetList = assets.map { name in
+            """
+            {"name":"\(name)","browser_download_url":"https://example.test/\(name)","size":1024}
+            """
+        }.joined(separator: ",")
+        return Data("""
+        {"tag_name":"\(tag)","name":"deck \(tag)","body":"notes here",
+         "html_url":"https://example.test/releases/\(tag)",
+         "draft":\(draft),"prerelease":\(prerelease),
+         "assets":[\(assetList)]}
+        """.utf8)
+    }
+
+    let current = Version(major: 1, minor: 3, patch: 0)
+
+    await T.test("versions parse with and without a leading v") {
+        T.equal(Version("v1.3.0")?.description, "1.3.0")
+        T.equal(Version("1.3.0")?.description, "1.3.0")
+        T.equal(Version("1.3")?.description, "1.3.0", "a short form fills in the patch")
+        T.equal(Version("2")?.description, "2.0.0")
+    }
+
+    await T.test("pre-release and build suffixes are ignored for ordering") {
+        T.equal(Version("1.4.0-beta.2")?.description, "1.4.0")
+        T.equal(Version("1.4.0+build9")?.description, "1.4.0")
+    }
+
+    await T.test("nonsense versions are rejected rather than defaulted") {
+        T.isNil(Version(""), "empty")
+        T.isNil(Version("banana"), "not numeric")
+        T.isNil(Version("1.2.3.4"), "too many components")
+        T.isNil(Version("-1.0.0"), "negative")
+    }
+
+    await T.test("versions compare numerically, not as strings") {
+        // The whole reason this is not a string compare: "1.10.0" < "1.9.0" alphabetically,
+        // which would offer an update backwards after ten minor releases.
+        T.expect(Version("1.10.0")! > Version("1.9.0")!, "1.10.0 must beat 1.9.0")
+        T.expect(Version("2.0.0")! > Version("1.99.99")!, "major wins")
+        T.expect(Version("1.3.1")! > Version("1.3.0")!, "patch counts")
+        T.expect(!(Version("1.3.0")! > Version("1.3.0")!), "equal is not newer")
+    }
+
+    await T.test("a newer release with a dmg is offered") {
+        let result = UpdateChecker.parse(
+            releaseJSON(tag: "v1.4.0", assets: ["Deck-1.4.0.dmg", "SHA256SUMS"]),
+            current: current)
+        guard case .success(.available(let update)) = result else {
+            T.fail("expected an available update, got \(result)")
+            return
+        }
+        T.equal(update.version.description, "1.4.0")
+        T.equal(update.downloadURL.lastPathComponent, "Deck-1.4.0.dmg")
+        T.notNil(update.checksumsURL, "checksums should be picked up")
+    }
+
+    await T.test("the same or an older release is up to date") {
+        for tag in ["v1.3.0", "v1.2.9", "v0.9.0"] {
+            let result = UpdateChecker.parse(
+                releaseJSON(tag: tag, assets: ["Deck-x.dmg"]), current: current)
+            guard case .success(.upToDate) = result else {
+                T.fail("\(tag) should not be an update")
+                return
+            }
+        }
+    }
+
+    await T.test("a newer release with no dmg is reported, not called up to date") {
+        // A Linux-only release would otherwise silently read as "you are current".
+        let result = UpdateChecker.parse(
+            releaseJSON(tag: "v1.5.0", assets: ["deck_1.5.0_amd64.deb"]), current: current)
+        guard case .success(.newerReleaseWithoutDownload(let version, _)) = result else {
+            T.fail("expected a download-less newer release, got \(result)")
+            return
+        }
+        T.equal(version.description, "1.5.0")
+    }
+
+    await T.test("drafts and pre-releases are not offered") {
+        for json in [
+            releaseJSON(tag: "v9.0.0", assets: ["Deck-9.dmg"], prerelease: true),
+            releaseJSON(tag: "v9.0.0", assets: ["Deck-9.dmg"], draft: true),
+        ] {
+            guard case .success(.upToDate) = UpdateChecker.parse(json, current: current) else {
+                T.fail("unstable releases must not be offered")
+                return
+            }
+        }
+    }
+
+    await T.test("a malformed payload fails rather than being treated as current") {
+        guard case .failure = UpdateChecker.parse(Data("not json".utf8), current: current) else {
+            T.fail("garbage must not read as up to date")
+            return
+        }
+    }
+
+    await T.test("the checksum for the right file is picked out of SHA256SUMS") {
+        let sums = """
+        aaa111  deck_1.3.0_amd64.deb
+        bbb222  Deck-1.3.0.dmg
+        ccc333  deck-1.3.0-linux-x86_64.tar.gz
+        """
+        T.equal(UpdateChecker.expectedDigest(for: "Deck-1.3.0.dmg", in: sums), "bbb222",
+                "must match by name, not take the first line")
+        T.isNil(UpdateChecker.expectedDigest(for: "absent.dmg", in: sums), "missing entry")
+    }
+
+    await T.test("decodes a real GitHub payload, dmg not first and extra keys present") {
+        // Shaped from the actual response for this repo's latest release. GitHub sends
+        // far more than is read here, and the macOS image is the fourth asset of seven —
+        // taking assets[0] would hand the user an rpm.
+        let real = Data("""
+        {"url":"https://api.github.com/repos/riddickburke/deck/releases/1",
+         "id":1,"node_id":"RE_x","tag_name":"v1.4.0","target_commitish":"main",
+         "name":"deck v1.4.0 — Linux support","draft":false,"prerelease":false,
+         "created_at":"2026-07-28T05:10:00Z","published_at":"2026-07-28T05:12:05Z",
+         "author":{"login":"riddickburke","id":2,"type":"User"},
+         "html_url":"https://github.com/riddickburke/deck/releases/tag/v1.4.0",
+         "body":"### Added\\n- Linux build\\n",
+         "assets":[
+          {"name":"deck-1.4.0-1.x86_64.rpm","size":22006658,"content_type":"application/x-rpm",
+           "browser_download_url":"https://example.test/deck-1.4.0-1.x86_64.rpm",
+           "uploader":{"login":"riddickburke"},"download_count":0},
+          {"name":"deck-1.4.0-linux-aarch64.tar.gz","size":21577243,
+           "browser_download_url":"https://example.test/deck-1.4.0-linux-aarch64.tar.gz"},
+          {"name":"deck-1.4.0-linux-x86_64.tar.gz","size":22132193,
+           "browser_download_url":"https://example.test/deck-1.4.0-linux-x86_64.tar.gz"},
+          {"name":"Deck-1.4.0.dmg","size":2598368,
+           "browser_download_url":"https://example.test/Deck-1.4.0.dmg"},
+          {"name":"deck_1.4.0_amd64.deb","size":16890492,
+           "browser_download_url":"https://example.test/deck_1.4.0_amd64.deb"},
+          {"name":"SHA256SUMS","size":459,
+           "browser_download_url":"https://example.test/SHA256SUMS"}]}
+        """.utf8)
+
+        guard case .success(.available(let update)) = UpdateChecker.parse(real, current: current)
+        else {
+            T.fail("a real payload should decode to an available update")
+            return
+        }
+        T.equal(update.version.description, "1.4.0")
+        T.equal(update.downloadURL.lastPathComponent, "Deck-1.4.0.dmg", "must pick the dmg")
+        T.equal(update.sizeInBytes, 2_598_368, "size should be the dmg's, not another asset's")
+        T.equal(update.checksumsURL?.lastPathComponent, "SHA256SUMS")
+        T.expect(update.notes.contains("Linux build"), "release notes should survive")
+    }
+
+    await T.test("binary-mode asterisks in SHA256SUMS are tolerated") {
+        T.equal(
+            UpdateChecker.expectedDigest(for: "Deck-1.3.0.dmg", in: "dead99  *Deck-1.3.0.dmg"),
+            "dead99")
+    }
+}
+
 exit(T.report())

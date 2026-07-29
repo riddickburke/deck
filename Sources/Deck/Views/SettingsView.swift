@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var app: AppState
+    @StateObject private var updater = Updater()
     @State private var transcodeCacheSize: Int64 = 0
     @State private var decodedCacheSize: Int64 = 0
 
@@ -17,6 +18,7 @@ struct SettingsView: View {
                 streamingSection
                 toolingSection
                 cacheSection
+                updateSection
             }
             .padding(18)
         }
@@ -352,6 +354,117 @@ struct SettingsView: View {
                     .foregroundStyle(app.theme.muted)
             }
             Spacer()
+        }
+    }
+
+    // MARK: Updates
+
+    private var updateSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "updates")
+
+            HStack(spacing: 10) {
+                Text("version \(Updater.currentVersion.description)")
+                    .font(DeckFont.mono(11))
+                    .foregroundStyle(app.theme.fg)
+
+                BracketButton(
+                    label: updater.isBusy ? "working…" : "check for updates",
+                    disabled: updater.isBusy
+                ) { updater.check() }
+
+                Spacer()
+            }
+
+            updateStatus
+        }
+    }
+
+    @ViewBuilder
+    private var updateStatus: some View {
+        switch updater.state {
+        case .idle:
+            Text("installs over the current version — no need to delete the old one first.")
+                .font(DeckFont.mono(9))
+                .foregroundStyle(app.theme.muted.opacity(0.75))
+
+        case .checking:
+            Text("checking github…")
+                .font(DeckFont.mono(10))
+                .foregroundStyle(app.theme.muted)
+
+        case .upToDate(let version):
+            Text("[ok] \(version) is the latest release")
+                .font(DeckFont.mono(10))
+                .foregroundStyle(app.theme.green)
+
+        case .available(let update):
+            VStack(alignment: .leading, spacing: 6) {
+                Text("\(update.version) is available · \(update.sizeInBytes.byteString)")
+                    .font(DeckFont.mono(11))
+                    .foregroundStyle(app.theme.accent)
+
+                if !update.notes.isEmpty {
+                    ScrollView {
+                        Text(update.notes)
+                            .font(DeckFont.mono(9))
+                            .foregroundStyle(app.theme.muted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(maxHeight: 120)
+                    .padding(8)
+                    .background(app.theme.bgInset)
+                    .overlay(Rectangle().strokeBorder(app.theme.border, lineWidth: 1))
+                }
+
+                HStack(spacing: 10) {
+                    BracketButton(label: "download & install", tint: app.theme.green) {
+                        updater.downloadAndInstall(update)
+                    }
+                    BracketButton(label: "release notes") {
+                        NSWorkspace.shared.open(update.pageURL)
+                    }
+                }
+            }
+
+        case .downloading(let update, let fraction):
+            VStack(alignment: .leading, spacing: 4) {
+                Text("downloading \(update.version)…  \(Int(fraction * 100))%")
+                    .font(DeckFont.mono(10))
+                    .foregroundStyle(app.theme.fg)
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Rectangle().fill(app.theme.bgInset)
+                        Rectangle()
+                            .fill(app.theme.accent)
+                            .frame(width: geo.size.width * fraction)
+                    }
+                }
+                .frame(height: 4)
+            }
+
+        case .installing(let update):
+            Text("verifying and installing \(update.version)…")
+                .font(DeckFont.mono(10))
+                .foregroundStyle(app.theme.fg)
+
+        case .readyToRestart:
+            Text("installing — Deck will quit and reopen on the new version.")
+                .font(DeckFont.mono(10))
+                .foregroundStyle(app.theme.green)
+
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 4) {
+                Text("[--] \(message)")
+                    .font(DeckFont.mono(10))
+                    .foregroundStyle(app.theme.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                BracketButton(label: "open releases page") {
+                    NSWorkspace.shared.open(
+                        URL(string: "https://github.com/\(UpdateChecker.repository)/releases/latest")!)
+                }
+            }
         }
     }
 
