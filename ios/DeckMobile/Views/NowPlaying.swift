@@ -132,6 +132,7 @@ struct NowPlayingScreen: View {
     @EnvironmentObject var playback: Playback
 
     @State private var dragOffset: CGFloat = 0
+    @State private var showsQueue = false
 
     var body: some View {
         GeometryReader { geo in
@@ -203,11 +204,22 @@ struct NowPlayingScreen: View {
 
             Spacer()
 
-            // Balances the chevron so the label stays centred.
-            Color.clear.frame(width: 44, height: 44)
+            Button { showsQueue = true } label: {
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(app.theme.fg)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
         }
         .padding(.horizontal, 8)
         .padding(.top, 6)
+        .sheet(isPresented: $showsQueue) {
+            QueueView()
+                .environmentObject(app)
+                .environmentObject(playback)
+                .presentationDragIndicator(.visible)
+        }
     }
 
     /// Artwork doubles as the transport: swipe across it for previous and next.

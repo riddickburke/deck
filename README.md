@@ -117,17 +117,22 @@ A separate app, in `ios/`. Same visual language, rebuilt for touch, and pointed 
 **Apple Music** rather than a local folder of files.
 
 ```
-┌─│ deck://apple-music ───────────────── ⌕  ⚙ ─┐
-│  albums   artists   songs   playlists        │
-│  ───────                                     │
+┌─│ deck://library ────────────── 3077 tracks ─┐
+│  PINNED                       hold to unpin  │
 │ ┌────────────┐  ┌────────────┐               │
-│ │            │  │            │               │
 │ │    art     │  │    art     │               │
-│ │            │  │            │               │
 │ └────────────┘  └────────────┘               │
-│  Kid A          Vespertine                   │
-│  Radiohead      Björk                        │
+│  Kid A          late night                   │
+│  Radiohead      25 tracks                    │
 │                                              │
+│  LIBRARY                                     │
+│ ┌──────────────────────────────────────────┐ │
+│ │ › albums                          323  › │ │
+│ │ › artists                          67  › │ │
+│ │ › songs                          3077  › │ │
+│ │ › playlists                        25  › │ │
+│ │ › queue                            12  › │ │
+│ └──────────────────────────────────────────┘ │
 │ ┌──────────────────────────────────────────┐ │
 │ │▔▔▔▔▔▔▔▔▔▔▔▔▔───────────────────────────  │ │
 │ │[art] Idioteque          ▂▅█▃▆    ‖       │ │
@@ -138,6 +143,16 @@ A separate app, in `ios/`. Same visual language, rebuilt for touch, and pointed 
 
 It reads your library — including Apple Music subscription tracks you have added — and
 never modifies it.
+
+Opening onto three hundred albums is not a starting point, so the home screen is up to
+six pinned albums or playlists over rows into the rest. Long-press anything to pin or
+unpin it. The four library pages still sit in a pager once you are inside them, so
+swiping left and right between albums, artists, songs and playlists works as before.
+
+The queue is editable: drag to reorder, swipe to remove. Edits go to the player's own
+queue through a transaction rather than rebuilding it, so reordering does not interrupt
+what is playing. The track currently playing cannot be removed — doing so stops playback
+with no visible cause.
 
 ### Gestures
 
@@ -152,7 +167,9 @@ The desktop build is driven by keys; this one is driven by the hand.
 | Swipe across the big artwork | Previous / next track |
 | Swipe a row right | Play next |
 | Swipe a row left | Add to queue |
-| Long-press an album | Play, play next, add to queue |
+| Long-press an album or playlist | Play, queue, pin to home |
+| Drag a queue row (after *edit*) | Reorder the queue |
+| Swipe a queue row left | Remove from the queue |
 | Swipe from the left edge | Back |
 
 ### Requirements

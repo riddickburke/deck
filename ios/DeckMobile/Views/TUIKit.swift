@@ -324,6 +324,29 @@ struct StatusMessage: View {
     }
 }
 
+// MARK: - Pin button
+
+/// Pin / unpin, for use inside a context menu.
+///
+/// Reads the current state itself so every call site does not have to, and so the label
+/// is always the action rather than the state — "unpin" on something already pinned.
+struct PinButton: View {
+    let target: PinTarget
+    @EnvironmentObject var app: MobileState
+
+    var body: some View {
+        let pinned = app.isPinned(target)
+        Button {
+            app.togglePin(target)
+            Haptics.commit()
+        } label: {
+            Label(
+                pinned ? "unpin from home" : "pin to home",
+                systemImage: pinned ? "pin.slash" : "pin")
+        }
+    }
+}
+
 // MARK: - Haptics
 
 /// Used sparingly — on the transport and on swipe actions committing, where the finger

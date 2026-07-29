@@ -22,8 +22,7 @@ struct RootView: View {
             NavigationStack(path: $path) {
                 VStack(spacing: 0) {
                     header
-                    pageTabs
-                    pager
+                    HomePage()
                 }
                 .background(app.theme.bg)
                 .navigationBarHidden(true)
@@ -107,14 +106,88 @@ struct RootView: View {
         }
     }
 
-    /// Tabs mirror the pager rather than drive it exclusively — tapping and swiping both
-    /// move the same binding, so they can never disagree.
-    private var pageTabs: some View {
+    @ViewBuilder
+    private func destination(for target: NavigationTarget) -> some View {
+        switch target {
+        case .library(let page):
+            LibraryPager(start: page)
+        case .queue:
+            QueueView()
+        case .album(let key):
+            if let album = app.albums.first(where: { $0.key == key }) {
+                AlbumDetail(album: album)
+            } else {
+                StatusMessage(title: "album not found")
+            }
+        case .artist(let name):
+            ArtistDetail(artist: name)
+        case .playlist(let id):
+            if let playlist = app.playlists.first(where: { $0.id == id }) {
+                PlaylistDetail(playlist: playlist)
+            } else {
+                StatusMessage(title: "playlist not found")
+            }
+        }
+    }
+}
+
+// MARK: - Library pager
+
+/// The four library pages, pushed from the home screen.
+///
+/// Kept as a pager rather than four separate destinations so swiping left and right
+/// between albums, artists, songs and playlists still works — that gesture predates the
+/// home screen and there was no reason to lose it just because the entry point moved.
+struct LibraryPager: View {
+    let start: LibraryPage
+
+    @EnvironmentObject var app: MobileState
+    @Environment(\.dismiss) private var dismiss
+    @State private var page: LibraryPage
+
+    init(start: LibraryPage) {
+        self.start = start
+        _page = State(initialValue: start)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            bar
+            tabs
+
+            TabView(selection: $page) {
+                AlbumsPage().tag(LibraryPage.albums)
+                ArtistsPage().tag(LibraryPage.artists)
+                SongsPage().tag(LibraryPage.songs)
+                PlaylistsPage().tag(LibraryPage.playlists)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+        }
+        .background(app.theme.bg)
+        .navigationBarBackButtonHidden(true)
+        .navigationBarHidden(true)
+    }
+
+    private var bar: some View {
+        HStack {
+            BracketButton(label: "← library") { dismiss() }
+            Spacer()
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 42)
+        .background(app.theme.bgInset)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(app.theme.border).frame(height: 1)
+        }
+    }
+
+    /// Tabs and the pager move the same binding, so they cannot disagree.
+    private var tabs: some View {
         HStack(spacing: 0) {
             ForEach(LibraryPage.allCases) { item in
-                let active = app.page == item
+                let active = page == item
                 Button {
-                    withAnimation(.easeOut(duration: 0.22)) { app.page = item }
+                    withAnimation(.easeOut(duration: 0.22)) { page = item }
                 } label: {
                     VStack(spacing: 5) {
                         Text(item.title)
@@ -136,37 +209,6 @@ struct RootView: View {
             Rectangle().fill(app.theme.border).frame(height: 1)
         }
     }
-
-    /// The primary gesture: swipe left and right to move between library pages.
-    private var pager: some View {
-        TabView(selection: $app.page) {
-            AlbumsPage().tag(LibraryPage.albums)
-            ArtistsPage().tag(LibraryPage.artists)
-            SongsPage().tag(LibraryPage.songs)
-            PlaylistsPage().tag(LibraryPage.playlists)
-        }
-        .tabViewStyle(.page(indexDisplayMode: .never))
-    }
-
-    @ViewBuilder
-    private func destination(for target: NavigationTarget) -> some View {
-        switch target {
-        case .album(let key):
-            if let album = app.albums.first(where: { $0.key == key }) {
-                AlbumDetail(album: album)
-            } else {
-                StatusMessage(title: "album not found")
-            }
-        case .artist(let name):
-            ArtistDetail(artist: name)
-        case .playlist(let id):
-            if let playlist = app.playlists.first(where: { $0.id == id }) {
-                PlaylistDetail(playlist: playlist)
-            } else {
-                StatusMessage(title: "playlist not found")
-            }
-        }
-    }
 }
 
 /// Navigation is by value, not by view.
@@ -174,6 +216,8 @@ struct RootView: View {
 /// Pushing a `Track`/`Album` directly would capture a stale copy; pushing its key means
 /// the destination re-resolves against current state after a library reload.
 enum NavigationTarget: Hashable {
+    case library(LibraryPage)
+    case queue
     case album(AlbumKey)
     case artist(String)
     case playlist(String)

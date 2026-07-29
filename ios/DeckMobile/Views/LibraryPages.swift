@@ -142,6 +142,8 @@ struct AlbumsPage: View {
                                 Button("play") { app.playback.play(tracks: album.tracks) }
                                 Button("play next") { app.playback.playNext(album.tracks) }
                                 Button("add to queue") { app.playback.enqueue(album.tracks) }
+                                Divider()
+                                PinButton(target: .album(album.key))
                             }
                         }
                     }
@@ -273,6 +275,11 @@ struct PlaylistsPage: View {
                     }
                     .buttonStyle(.plain)
                     .queueSwipeActions { app.tracks(in: playlist) }
+                    .contextMenu {
+                        Button("play") { app.playback.play(tracks: app.tracks(in: playlist)) }
+                        Divider()
+                        PinButton(target: .playlist(playlist.id))
+                    }
                 }
                 Spacer().frame(height: 90).listRowBackground(Color.clear)
             }

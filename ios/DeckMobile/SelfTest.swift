@@ -24,8 +24,41 @@ enum SelfTest {
 
         probeArtwork()
         await probePlayback(playback)
+        await probeQueueEditing(playback)
 
         Log.library.notice("selftest: end")
+    }
+
+    /// Does a queue edit actually take?
+    ///
+    /// The queue belongs to the media services process and is mutated through a
+    /// transaction that reports success asynchronously, so "the row moved in the list"
+    /// is not evidence the player agreed. This reorders, then reads the queue back to
+    /// see where the track really ended up.
+    ///
+    /// Positions only — the track is identified by where it sits, never by name.
+    private static func probeQueueEditing(_ playback: Playback) async {
+        let tracks = await MainActor.run { playback.queue }
+        guard tracks.count >= 3 else {
+            Log.playback.notice("selftest: queue too short to reorder (\(tracks.count))")
+            return
+        }
+
+        // Move the third track to the front, then check it is there.
+        let moving = tracks[2]
+        await MainActor.run { playback.moveQueueItem(from: IndexSet(integer: 2), to: 0) }
+        try? await Task.sleep(nanoseconds: 2_500_000_000)
+
+        let after = await MainActor.run { playback.queue }
+        let landed = after.firstIndex(where: { $0.id == moving.id })
+        Log.playback.notice(
+            "selftest: moved index 2 -> 0, now at \(landed.map(String.init) ?? "missing"), queue \(after.count)")
+
+        let before = after.count
+        await MainActor.run { playback.removeQueueItems(at: IndexSet(integer: after.count - 1)) }
+        try? await Task.sleep(nanoseconds: 2_500_000_000)
+        let removed = await MainActor.run { playback.queue.count }
+        Log.playback.notice("selftest: removed last, queue \(before) -> \(removed)")
     }
 
     /// Does artwork actually come back for the items in this library?
@@ -75,17 +108,18 @@ enum SelfTest {
     /// Does the player actually start?
     private static func probePlayback(_ playback: Playback) async {
         let query = MPMediaQuery.songs()
-        guard let first = query.items?.first,
-              let track = MusicLibrary.track(from: first)
-        else {
+        // Several, not one: the queue-editing probe that follows needs something to
+        // reorder, and a one-item queue cannot demonstrate a move.
+        let tracks = (query.items?.prefix(5) ?? []).compactMap(MusicLibrary.track(from:))
+        guard !tracks.isEmpty else {
             Log.playback.error("selftest: no track to play")
             return
         }
 
-        let controller = MPMusicPlayerController.applicationMusicPlayer
+        let controller = MPMusicPlayerController.applicationQueuePlayer
         Log.playback.notice("selftest: state before \(describe(controller.playbackState))")
 
-        await MainActor.run { playback.play(tracks: [track]) }
+        await MainActor.run { playback.play(tracks: tracks) }
 
         // Long enough for prepareToPlay to call back and the player to spin up.
         try? await Task.sleep(nanoseconds: 4_000_000_000)

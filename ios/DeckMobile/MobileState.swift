@@ -53,13 +53,6 @@ final class MobileState: ObservableObject {
 
     // MARK: - Navigation
 
-    @Published var page: LibraryPage = .albums
-    @Published var searchText = ""
-    /// Raised while a text field holds focus. Nothing on iOS depends on it the way the
-    /// desktop key bindings did, but the now-playing drag gesture uses it to stay out of
-    /// the way of the keyboard.
-    @Published var isEditingText = false
-
     /// Whether the full-screen now-playing screen is up.
     ///
     /// A plain flag driving a `fullScreenCover`, rather than the drag-progress value
@@ -68,6 +61,47 @@ final class MobileState: ObservableObject {
     /// hit-testing being disabled correctly to stay out of the way. A cover is what
     /// "full screen" actually means on iOS, and it cannot swallow touches when closed.
     @Published var isNowPlayingOpen = false
+
+    // MARK: - Pins
+
+    /// What sits at the top of the home screen. Capped at six, which is what fits
+    /// above the library rows without the home screen becoming a scrolling grid of
+    /// its own.
+    @Published private(set) var pins: [PinTarget] = Defaults.pins
+
+    static let maxPins = 6
+
+    func isPinned(_ target: PinTarget) -> Bool { pins.contains(target) }
+
+    /// Pinning a seventh drops the oldest rather than refusing, so the gesture always
+    /// does something visible.
+    func togglePin(_ target: PinTarget) {
+        if let index = pins.firstIndex(of: target) {
+            pins.remove(at: index)
+        } else {
+            pins.append(target)
+            if pins.count > Self.maxPins { pins.removeFirst(pins.count - Self.maxPins) }
+        }
+        Defaults.pins = pins
+        Defaults.hasSeededPins = true
+    }
+
+    /// Gives a first run something to look at.
+    ///
+    /// An empty home screen with only a hint reads as a broken screen. Playlists first
+    /// because someone who made them is likelier to want them; albums fill any gap.
+    /// Only ever runs once — after that the pins are the user's business.
+    private func seedPinsIfNeeded() {
+        guard !Defaults.hasSeededPins, pins.isEmpty else { return }
+        var seeded: [PinTarget] = playlists.prefix(Self.maxPins).map { .playlist($0.id) }
+        if seeded.count < Self.maxPins {
+            seeded += albums.prefix(Self.maxPins - seeded.count).map { .album($0.key) }
+        }
+        guard !seeded.isEmpty else { return }
+        pins = seeded
+        Defaults.pins = seeded
+        Defaults.hasSeededPins = true
+    }
 
     // MARK: - Appearance
 
@@ -127,6 +161,7 @@ final class MobileState: ObservableObject {
         tracks = snapshot.tracks
         playlists = snapshot.playlists
         rebuildDerived()
+        seedPinsIfNeeded()
         Log.library.notice(
             "loaded \(self.tracks.count) tracks, \(self.albums.count) albums, \(self.playlists.count) playlists")
     }
@@ -272,6 +307,23 @@ final class Visualizer: ObservableObject {
     }
 }
 
+/// Something the user has pinned to the home screen.
+///
+/// Stored as a reference rather than a copy: an `Album` holds its tracks, so persisting
+/// one would freeze a snapshot of the library that goes stale the moment anything is
+/// added in the Music app.
+enum PinTarget: Codable, Hashable, Identifiable {
+    case album(AlbumKey)
+    case playlist(String)
+
+    var id: String {
+        switch self {
+        case .album(let key): return "album:\(key.artist)|\(key.album)"
+        case .playlist(let id): return "playlist:\(id)"
+        }
+    }
+}
+
 /// Results of a single search pass, kept as one value so the view updates atomically.
 struct SearchResults {
     var tracks: [Track] = []
@@ -299,5 +351,23 @@ enum Defaults {
     static var visualizerEnabled: Bool {
         get { store.object(forKey: "visualizer") as? Bool ?? true }
         set { store.set(newValue, forKey: "visualizer") }
+    }
+
+    static var pins: [PinTarget] {
+        get {
+            guard let data = store.data(forKey: "pins") else { return [] }
+            return (try? JSONDecoder().decode([PinTarget].self, from: data)) ?? []
+        }
+        set {
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            store.set(data, forKey: "pins")
+        }
+    }
+
+    /// Distinguishes "never pinned anything" from "deliberately unpinned everything",
+    /// so clearing the home screen is not undone on the next launch.
+    static var hasSeededPins: Bool {
+        get { store.bool(forKey: "hasSeededPins") }
+        set { store.set(newValue, forKey: "hasSeededPins") }
     }
 }

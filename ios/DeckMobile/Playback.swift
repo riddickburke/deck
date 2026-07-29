@@ -39,7 +39,13 @@ final class Playback: ObservableObject {
         didSet { player.shuffleMode = shuffleMode }
     }
 
-    private let player = MPMusicPlayerController.applicationMusicPlayer
+    /// `applicationQueuePlayer`, not `applicationMusicPlayer`.
+    ///
+    /// The two behave identically — both own a private queue that leaves the Music app's
+    /// own playback alone — but only the queue player is an
+    /// `MPMusicPlayerApplicationController`, which is where `performQueueTransaction` is
+    /// declared. Without it the queue is read-only and cannot be reordered.
+    private let player = MPMusicPlayerController.applicationQueuePlayer
     private var ticker: Timer?
     private var observers: [NSObjectProtocol] = []
 
@@ -137,6 +143,9 @@ final class Playback: ObservableObject {
                         self.player.nowPlayingItem = item
                     }
                     self.player.play()
+                    // Reconcile against what the player actually accepted, which can
+                    // differ from what was handed to it.
+                    self.refreshQueue()
                 }
                 self.syncFromPlayer()
             }
@@ -166,12 +175,116 @@ final class Playback: ObservableObject {
             itemCollection: MPMediaItemCollection(items: items))
     }
 
-    /// The player exposes no way to read its queue back, so the local copy is updated to
-    /// match what was just handed over. It is only used to draw the queue list.
+    /// The local copy is updated to match what was just handed over, then reconciled
+    /// against the player's own queue once it settles.
     private func syncQueueTail(_ tracks: [Track], atFront: Bool) {
-        guard !queue.isEmpty else { queue = tracks; return }
-        let insertion = min(queueIndex + 1, queue.count)
-        queue.insert(contentsOf: tracks, at: atFront ? insertion : queue.count)
+        if queue.isEmpty {
+            queue = tracks
+        } else {
+            let insertion = min(queueIndex + 1, queue.count)
+            queue.insert(contentsOf: tracks, at: atFront ? insertion : queue.count)
+        }
+        refreshQueue()
+    }
+
+    // MARK: - Queue editing
+
+    /// Reads the player's real queue back into `queue`.
+    ///
+    /// There is no property for this. An empty queue transaction is the only way to be
+    /// handed the current items, so that is what this is — a read dressed as a write.
+    func refreshQueue() {
+        // The `queueTransaction:` label is required, not stylistic: with a trailing
+        // closure this resolves to NSObject's `perform(_:with:)` instead.
+        player.perform(queueTransaction: { _ in
+            // Deliberately no mutation.
+        }, completionHandler: { [weak self] queue, error in
+            let items = queue.items
+            Task { @MainActor in
+                guard let self, error == nil else {
+                    if let error {
+                        Log.playback.error("refreshQueue failed: \(error.localizedDescription)")
+                    }
+                    return
+                }
+                self.queue = items.compactMap(MusicLibrary.track(from:))
+                if let id = self.currentTrack?.externalID,
+                   let index = self.queue.firstIndex(where: { $0.externalID == id }) {
+                    self.queueIndex = index
+                }
+            }
+        })
+    }
+
+    /// Moves one track within the queue.
+    ///
+    /// The queue belongs to the media services process, so it cannot simply be replaced
+    /// with a reordered array — doing that with `setQueue` restarts playback from the
+    /// top. A transaction expresses the move as a removal plus an insertion after the
+    /// track it should now follow, which the player applies without interrupting audio.
+    func moveQueueItem(from source: IndexSet, to destination: Int) {
+        guard let from = source.first, from < queue.count else { return }
+
+        // Applied locally first so the row lands where the finger dropped it, rather
+        // than snapping back until the player's callback arrives.
+        var reordered = queue
+        reordered.move(fromOffsets: source, toOffset: destination)
+        let moved = queue[from]
+        // `move(fromOffsets:toOffset:)` uses a pre-removal index; the item it should
+        // follow is whatever ends up before it afterwards.
+        let newIndex = reordered.firstIndex(where: { $0.id == moved.id }) ?? 0
+        let predecessor = newIndex > 0 ? reordered[newIndex - 1] : nil
+        queue = reordered
+
+        player.perform(queueTransaction: { mutable in
+            guard let item = mutable.items.first(where: {
+                String($0.persistentID) == moved.externalID
+            }) else { return }
+
+            mutable.remove(item)
+
+            let descriptor = MPMusicPlayerMediaItemQueueDescriptor(
+                itemCollection: MPMediaItemCollection(items: [item]))
+            if let predecessor,
+               let after = mutable.items.first(where: {
+                   String($0.persistentID) == predecessor.externalID
+               }) {
+                mutable.insert(descriptor, after: after)
+            } else {
+                // nil means the head of the queue.
+                mutable.insert(descriptor, after: nil)
+            }
+        }, completionHandler: { [weak self] _, error in
+            if let error {
+                Log.playback.error("queue move failed: \(error.localizedDescription)")
+            }
+            Task { @MainActor in self?.refreshQueue() }
+        })
+    }
+
+    /// Removes tracks from the queue.
+    func removeQueueItems(at offsets: IndexSet) {
+        let removing = offsets.compactMap { $0 < queue.count ? queue[$0] : nil }
+        guard !removing.isEmpty else { return }
+
+        // Removing what is playing would stop playback with no obvious cause, so it is
+        // skipped — the row for the current track is not swipeable in the UI either.
+        let ids = Set(removing.compactMap(\.externalID)).subtracting(
+            [currentTrack?.externalID].compactMap { $0 })
+        guard !ids.isEmpty else { return }
+
+        queue.removeAll { $0.externalID.map(ids.contains) ?? false }
+
+        player.perform(queueTransaction: { mutable in
+            for item in mutable.items where ids.contains(String(item.persistentID)) {
+                mutable.remove(item)
+            }
+        }, completionHandler: { [weak self] _, error in
+            if let error {
+                Log.playback.error("queue remove failed: \(error.localizedDescription)")
+            }
+            Task { @MainActor in self?.refreshQueue() }
+        })
     }
 
     func toggle() {
