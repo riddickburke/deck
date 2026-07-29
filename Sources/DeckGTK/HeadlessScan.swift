@@ -1,10 +1,6 @@
 import DeckCore
 import Foundation
 
-enum DeckVersion {
-    static let current = "1.3.0"
-}
-
 /// Console diagnostics for `deck --scan`. Reports aggregate counts only — it never
 /// prints the library's contents.
 enum HeadlessScan {

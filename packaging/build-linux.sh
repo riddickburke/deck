@@ -11,7 +11,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$PWD"
-VERSION="$(grep -oP '(?<=static let current = ")[^"]+' Sources/DeckGTK/HeadlessScan.swift)"
+# Single source of truth — see Sources/DeckCore/Version.swift.
+VERSION="$(sed -n 's/.*static let current = "\([^"]*\)".*/\1/p' Sources/DeckCore/Version.swift)"
 ARCH="$(uname -m)"
 DEB_ARCH="$([ "$ARCH" = "x86_64" ] && echo amd64 || echo arm64)"
 

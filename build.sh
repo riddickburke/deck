@@ -16,7 +16,8 @@ cd "$(dirname "$0")"
 ROOT="$PWD"
 APP_NAME="Deck"
 BUNDLE_ID="com.riddickburke.deck"
-VERSION="1.4.0"
+# Single source of truth — see Sources/DeckCore/Version.swift.
+VERSION="$(sed -n 's/.*static let current = "\([^"]*\)".*/\1/p' Sources/DeckCore/Version.swift)"
 DIST="$ROOT/dist"
 APP="$DIST/$APP_NAME.app"
 
