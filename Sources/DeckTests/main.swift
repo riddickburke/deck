@@ -1202,6 +1202,19 @@ do {
         }
     }
 
+    await T.test("up to date reports the published version, not the running one") {
+        // A development build ahead of the last release must not report its own version
+        // as the newest thing on GitHub — which is what carrying `current` here did.
+        let ahead = Version(major: 1, minor: 4, patch: 0)
+        let result = UpdateChecker.parse(
+            releaseJSON(tag: "v1.3.0", assets: ["Deck-1.3.0.dmg"]), current: ahead)
+        guard case .success(.upToDate(let latest)) = result else {
+            T.fail("expected up to date, got \(result)")
+            return
+        }
+        T.equal(latest.description, "1.3.0", "should be the release, not the running build")
+    }
+
     await T.test("a newer release with no dmg is reported, not called up to date") {
         // A Linux-only release would otherwise silently read as "you are current".
         let result = UpdateChecker.parse(

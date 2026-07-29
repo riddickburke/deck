@@ -39,7 +39,12 @@ public enum UpdateChecker {
     }
 
     public enum Result: Sendable, Equatable {
-        case upToDate(current: Version)
+        /// Carries the newest *published* version, which is not the running one.
+        ///
+        /// It used to carry `current`, while every message describing it said "latest
+        /// release is …" — so a development build ahead of the last release cheerfully
+        /// reported its own version as the newest thing on GitHub.
+        case upToDate(latest: Version)
         case available(Update)
         /// A newer release exists but carries no macOS disk image — a Linux-only
         /// release, say. Worth saying so rather than reporting "up to date", which
@@ -119,14 +124,16 @@ public enum UpdateChecker {
         guard let release = try? JSONDecoder().decode(Release.self, from: data) else {
             return .failure(.malformed("could not decode the release"))
         }
+        // A draft or pre-release is not something to offer, and its tag is not the
+        // latest stable version either, so the running version is all we can report.
         guard release.draft != true, release.prerelease != true else {
-            return .success(.upToDate(current: current))
+            return .success(.upToDate(latest: current))
         }
         guard let version = Version(release.tag_name) else {
             return .failure(.malformed("unrecognised tag \(release.tag_name)"))
         }
         guard version > current else {
-            return .success(.upToDate(current: current))
+            return .success(.upToDate(latest: version))
         }
 
         guard let dmg = release.assets.first(where: {

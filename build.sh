@@ -16,7 +16,7 @@ cd "$(dirname "$0")"
 ROOT="$PWD"
 APP_NAME="Deck"
 BUNDLE_ID="com.riddickburke.deck"
-VERSION="1.3.0"
+VERSION="1.4.0"
 DIST="$ROOT/dist"
 APP="$DIST/$APP_NAME.app"
 
