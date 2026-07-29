@@ -27,6 +27,30 @@ public struct Config: Codable, Equatable, Sendable {
     /// that audio is in another process and cannot be analysed.
     public var animateStreamingVisualiser: Bool?
 
+    /// What gets pushed to the device. Optional so a config written before this existed
+    /// still decodes; nil means `.selection`, which is the behaviour that predates it.
+    public var syncScope: SyncScope?
+    /// Albums marked for sync individually, independent of any playlist.
+    ///
+    /// Stored as album keys rather than track paths so a mark survives a rescan, a
+    /// re-tag, or the files moving — the album is still the same album.
+    public var syncedAlbums: [AlbumKey]?
+
+    /// Which part of the library the device gets.
+    public enum SyncScope: String, Codable, CaseIterable, Sendable {
+        /// Marked playlists plus marked albums.
+        case selection
+        /// Every local track in the library.
+        case entireLibrary
+
+        public var label: String {
+            switch self {
+            case .selection: return "selected playlists & albums"
+            case .entireLibrary: return "entire library"
+            }
+        }
+    }
+
     public enum RepeatMode: String, Codable, CaseIterable, Sendable {
         case off, all, one
         public var symbol: String {
@@ -53,7 +77,9 @@ public struct Config: Codable, Equatable, Sendable {
         onlineLookupEnabled: true,
         spotifyClientID: nil,
         spectrumSensitivity: 0.35,
-        animateStreamingVisualiser: true
+        animateStreamingVisualiser: true,
+        syncScope: .selection,
+        syncedAlbums: []
     )
 
     // MARK: - Paths

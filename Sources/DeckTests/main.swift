@@ -1022,4 +1022,109 @@ if !Shell.has("ffmpeg") {
     }
 }
 
+// MARK: - Sync selection
+
+T.suite("sync selection")
+
+/// Syncing used to mean "playlists marked in the sidebar" and nothing else. These cover
+/// the two ways that widened — the whole library, and individually marked albums — plus
+/// the overlaps that would otherwise copy a track twice or lose one entirely.
+do {
+    func libraryTrack(_ title: String, album: String, artist: String = "Radiohead") -> Track {
+        var track = makeTrack(title: title, artist: artist, album: album)
+        track.url = URL(fileURLWithPath: "/lib/\(artist)/\(album)/\(title).flac")
+        return track
+    }
+
+    let kidA = [
+        libraryTrack("Everything", album: "Kid A"),
+        libraryTrack("Idioteque", album: "Kid A"),
+    ]
+    let vespertine = [libraryTrack("Hidden Place", album: "Vespertine", artist: "Björk")]
+    let library = kidA + vespertine
+
+    let kidAKey = AlbumKey(album: "Kid A", artist: "Radiohead")
+    let vespertineKey = AlbumKey(album: "Vespertine", artist: "Björk")
+
+    func playlist(_ name: String, _ tracks: [Track], enabled: Bool) -> Playlist {
+        Playlist(name: name, trackPaths: tracks.map(\.url.path), syncEnabled: enabled)
+    }
+
+    await T.test("entire library takes everything, ignoring marks") {
+        let result = SyncSelection.resolve(
+            scope: .entireLibrary, localTracks: library, playlists: [], markedAlbums: [])
+        T.equal(result.count, 3)
+    }
+
+    await T.test("entire library excludes streaming tracks") {
+        let streamed = Track(
+            source: .appleMusic, externalID: "1", title: "Cloud", artist: "A",
+            albumArtist: "A", album: "B", duration: 100)
+        let result = SyncSelection.resolve(
+            scope: .entireLibrary, localTracks: library + [streamed],
+            playlists: [], markedAlbums: [])
+        T.equal(result.count, 3, "a streaming track has no file to copy")
+    }
+
+    await T.test("a marked album syncs without any playlist") {
+        let result = SyncSelection.resolve(
+            scope: .selection, localTracks: library,
+            playlists: [], markedAlbums: [kidAKey])
+        T.equal(result.count, 2)
+        T.expect(result.allSatisfy { $0.album == "Kid A" }, "only the marked album")
+    }
+
+    await T.test("marked albums and enabled playlists combine") {
+        let result = SyncSelection.resolve(
+            scope: .selection, localTracks: library,
+            playlists: [playlist("mix", vespertine, enabled: true)],
+            markedAlbums: [kidAKey])
+        T.equal(result.count, 3, "playlist plus marked album")
+    }
+
+    await T.test("a track in both a playlist and a marked album is copied once") {
+        let result = SyncSelection.resolve(
+            scope: .selection, localTracks: library,
+            playlists: [playlist("overlap", [kidA[0]], enabled: true)],
+            markedAlbums: [kidAKey])
+        T.equal(result.count, 2, "deduplicated by source path")
+        T.equal(Set(result.map(\.url.path)).count, 2)
+    }
+
+    await T.test("disabled playlists are ignored") {
+        let result = SyncSelection.resolve(
+            scope: .selection, localTracks: library,
+            playlists: [playlist("off", vespertine, enabled: false)],
+            markedAlbums: [])
+        T.equal(result.count, 0)
+    }
+
+    await T.test("a mark for an album no longer in the library is skipped, not fatal") {
+        let missing = AlbumKey(album: "Gone", artist: "Nobody")
+        let result = SyncSelection.resolve(
+            scope: .selection, localTracks: library,
+            playlists: [], markedAlbums: [missing, kidAKey])
+        T.equal(result.count, 2, "the stale mark must not lose the good one")
+    }
+
+    await T.test("albums are matched by album artist, so compilations stay together") {
+        // Same album, differing track artists — the grouping key uses album artist.
+        var featured = libraryTrack("Feature", album: "Kid A")
+        featured.artist = "Someone Else"
+        featured.albumArtist = "Radiohead"
+
+        let result = SyncSelection.resolve(
+            scope: .selection, localTracks: library + [featured],
+            playlists: [], markedAlbums: [kidAKey])
+        T.equal(result.count, 3, "a guest artist should not fall out of the album")
+    }
+
+    await T.test("nothing marked yields nothing") {
+        let result = SyncSelection.resolve(
+            scope: .selection, localTracks: library, playlists: [], markedAlbums: [])
+        T.equal(result.count, 0)
+        _ = vespertineKey
+    }
+}
+
 exit(T.report())

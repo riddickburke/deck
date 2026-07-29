@@ -163,28 +163,87 @@ struct SyncView: View {
     // MARK: Selection
 
     private var selectionSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            SectionLabel(text: "selection")
-            let selection = app.syncSelection
-            if selection.isEmpty {
-                Text("no playlists marked for sync.")
+        let scope = app.config.syncScope ?? .selection
+        let selection = app.syncSelection
+
+        return VStack(alignment: .leading, spacing: 8) {
+            SectionLabel(text: "what to sync")
+
+            // Two radio-style rows rather than a toggle, because "entire library" is a
+            // big enough action to want to be picked deliberately.
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(Config.SyncScope.allCases, id: \.self) { option in
+                    scopeRow(option, active: scope == option)
+                }
+            }
+
+            if scope == .entireLibrary {
+                let bytes = selection.reduce(Int64(0)) { $0 + $1.fileSize }
+                Text("\(selection.count) tracks · \(bytes.byteString) at source")
+                    .font(DeckFont.mono(11))
+                    .foregroundStyle(app.theme.fg)
+                if app.tracks.count != selection.count {
+                    // Streaming tracks are in the library but cannot be copied.
+                    Text("\(app.tracks.count - selection.count) streaming tracks excluded — no file to copy")
+                        .font(DeckFont.mono(10))
+                        .foregroundStyle(app.theme.muted.opacity(0.8))
+                }
+            } else if selection.isEmpty {
+                Text("nothing marked for sync.")
                     .font(DeckFont.mono(11))
                     .foregroundStyle(app.theme.muted)
-                Text("click the ◇ next to a playlist in the sidebar to include it.")
+                Text("click the ◇ next to a playlist in the sidebar, or right-click an album → sync album to device.")
                     .font(DeckFont.mono(10))
                     .foregroundStyle(app.theme.muted.opacity(0.7))
+                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 let bytes = selection.reduce(Int64(0)) { $0 + $1.fileSize }
                 Text("\(selection.count) tracks · \(bytes.byteString) at source")
                     .font(DeckFont.mono(11))
                     .foregroundStyle(app.theme.fg)
+
                 ForEach(app.playlists.filter(\.syncEnabled)) { playlist in
                     Text("  ◆ \(playlist.name) (\(playlist.trackPaths.count))")
                         .font(DeckFont.mono(10))
                         .foregroundStyle(app.theme.green)
                 }
+
+                if !app.syncedAlbumKeys.isEmpty {
+                    ForEach(app.syncedAlbumKeys, id: \.self) { key in
+                        HStack(spacing: 6) {
+                            Text("  ▣ \(key.album) — \(key.artist)")
+                                .font(DeckFont.mono(10))
+                                .foregroundStyle(
+                                    // An album marked before the library changed may no
+                                    // longer resolve; saying so beats it just missing.
+                                    app.album(for: key) == nil
+                                        ? app.theme.yellow : app.theme.accent)
+                                .lineLimit(1)
+                            if app.album(for: key) == nil {
+                                Text("(not in library)")
+                                    .font(DeckFont.mono(9))
+                                    .foregroundStyle(app.theme.yellow.opacity(0.8))
+                            }
+                        }
+                    }
+                    BracketButton(label: "clear album marks") { app.clearAlbumSyncMarks() }
+                }
             }
         }
+    }
+
+    private func scopeRow(_ option: Config.SyncScope, active: Bool) -> some View {
+        HStack(spacing: 8) {
+            Text(active ? "◆" : "◇")
+                .font(DeckFont.mono(11))
+                .foregroundStyle(active ? app.theme.accent : app.theme.muted)
+            Text(option.label)
+                .font(DeckFont.mono(11))
+                .foregroundStyle(active ? app.theme.fg : app.theme.muted)
+            Spacer()
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { app.setSyncScope(option) }
     }
 
     // MARK: Plan

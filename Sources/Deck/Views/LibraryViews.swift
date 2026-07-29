@@ -59,6 +59,19 @@ struct AlbumCard: View {
                     selected ? app.theme.accent : (hovering ? app.theme.fg.opacity(0.5) : .clear),
                     lineWidth: 1)
             )
+            // Marked for the device. Without this the marks are only visible in the sync
+            // pane, so there is no way to tell from the grid what is already going across.
+            .overlay(alignment: .topTrailing) {
+                if app.isAlbumSynced(album.key) {
+                    Text("▣")
+                        .font(DeckFont.mono(11))
+                        .foregroundStyle(app.theme.accent)
+                        .padding(3)
+                        .background(app.theme.bg.opacity(0.75))
+                        .padding(4)
+                        .help("marked for device sync")
+                }
+            }
 
             Text(album.title)
                 .font(DeckFont.mono(11))
@@ -102,11 +115,40 @@ struct AlbumMenu: View {
             app.createPlaylist(named: album.title, tracks: album.tracks)
         }
         Divider()
+        SyncAlbumButton(album: album)
+        Divider()
         ConvertMenu(tracks: album.tracks, label: "convert album to mp3")
         Divider()
         Button("refetch artwork") { app.refetchArtwork(for: album) }
         Button("reveal in finder") {
             if let dir = album.directory { NSWorkspace.shared.open(dir) }
+        }
+    }
+}
+
+// MARK: - Sync album
+
+/// Right-click → mark an album for the device, without going through a playlist.
+///
+/// Syncing used to mean "playlists marked in the sidebar" and nothing else, so getting a
+/// single album onto the player meant making a playlist for it. The mark is stored by
+/// album key rather than by track path, so it survives a rescan or a re-tag.
+struct SyncAlbumButton: View {
+    let album: Album
+    @EnvironmentObject var app: AppState
+
+    var body: some View {
+        let synced = app.isAlbumSynced(album.key)
+        // Streaming albums have no files to copy, so offering to sync one would be an
+        // action that silently does nothing.
+        let isLocal = album.tracks.contains { !$0.isStreaming }
+
+        if isLocal {
+            Button(synced ? "remove from device sync" : "sync album to device") {
+                app.toggleAlbumSync(album.key)
+            }
+        } else {
+            Text("streaming — nothing to sync")
         }
     }
 }

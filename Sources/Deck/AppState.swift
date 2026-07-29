@@ -211,18 +211,59 @@ final class AppState: ObservableObject {
         return playlist.trackPaths.compactMap { byPath[$0] }
     }
 
-    /// Tracks that will be pushed to the device: everything in every sync-enabled playlist.
+    /// Tracks that will be pushed to the device.
+    ///
+    /// Either the whole library, or the union of every sync-enabled playlist and every
+    /// album marked for sync. Streaming tracks are excluded throughout: there is no file
+    /// behind them to copy, and including them would inflate the plan with work that
+    /// silently does nothing.
     var syncSelection: [Track] {
-        let enabled = playlists.filter(\.syncEnabled)
-        guard !enabled.isEmpty else { return [] }
-        var seen = Set<String>()
-        var result: [Track] = []
-        for playlist in enabled {
-            for track in tracks(in: playlist) where seen.insert(track.url.path).inserted {
-                result.append(track)
-            }
+        SyncSelection.resolve(
+            scope: config.syncScope ?? .selection,
+            localTracks: localTracks,
+            playlists: playlists,
+            markedAlbums: syncedAlbumKeys)
+    }
+
+    // MARK: Album sync marks
+
+    var syncedAlbumKeys: [AlbumKey] { config.syncedAlbums ?? [] }
+
+    func isAlbumSynced(_ key: AlbumKey) -> Bool { syncedAlbumKeys.contains(key) }
+
+    /// Marks or unmarks one album for syncing.
+    ///
+    /// Marking also switches the scope back to `.selection` — otherwise the mark appears
+    /// to do nothing, because the whole library is already going across.
+    func toggleAlbumSync(_ key: AlbumKey) {
+        var marked = syncedAlbumKeys
+        if let index = marked.firstIndex(of: key) {
+            marked.remove(at: index)
+        } else {
+            marked.append(key)
+            config.syncScope = .selection
         }
-        return result
+        // Assigning to `config` persists it — see its didSet.
+        config.syncedAlbums = marked
+        // Any existing plan describes a selection that no longer exists.
+        syncPlan = nil
+        statusMessage = marked.contains(key)
+            ? "album marked for sync (\(marked.count) marked)"
+            : "album removed from sync"
+    }
+
+    func setSyncScope(_ scope: Config.SyncScope) {
+        config.syncScope = scope
+        syncPlan = nil
+        statusMessage = scope == .entireLibrary
+            ? "syncing entire library — \(localTracks.count) tracks"
+            : "syncing selected playlists & albums"
+    }
+
+    func clearAlbumSyncMarks() {
+        config.syncedAlbums = []
+        syncPlan = nil
+        statusMessage = "cleared album sync marks"
     }
 
     // MARK: - Scanning

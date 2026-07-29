@@ -411,8 +411,19 @@ Connect the player in USB disk mode. Any volume with a `.rockbox` directory is d
 automatically, along with its target and firmware version; other removable volumes are
 offered too, so a freshly formatted player still works.
 
-Mark playlists for sync with the `◇` toggle in the sidebar, then open the sync view and
-press `[ dry run ]` to see exactly what would change before anything is written.
+Choose what goes across in the sync view:
+
+- **entire library** — every local track, in one click.
+- **selected playlists & albums** — mark playlists with the `◇` toggle in the sidebar, and
+  mark individual albums by right-clicking one → *sync album to device*. Marked albums
+  carry a `▣` badge in the grid. The two combine, deduplicated, so a track in both a
+  marked playlist and a marked album is copied once.
+
+Album marks are stored by album key rather than by file path, so they survive a rescan, a
+re-tag, or the files moving. A mark whose album is no longer in the library is shown as
+such rather than quietly dropped.
+
+Then press `[ dry run ]` to see exactly what would change before anything is written.
 
 - **Layout** — `Music/{albumartist}/{album}/NN Title.ext`, configurable with
   `{albumartist} {artist} {album} {year} {genre}` tokens. Every path component is made safe
