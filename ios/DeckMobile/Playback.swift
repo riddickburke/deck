@@ -189,77 +189,31 @@ final class Playback: ObservableObject {
 
     // MARK: - Queue editing
 
-    /// Reads the player's real queue back into `queue`.
+    /// `queue` is the source of truth for what the queue contains.
     ///
-    /// There is no property for this. An empty queue transaction is the only way to be
-    /// handed the current items, so that is what this is — a read dressed as a write.
+    /// The obvious implementation of editing is `performQueueTransaction`, which mutates
+    /// the player's queue in place and does not interrupt playback. On device it does not
+    /// work: a remove-then-insert move is rejected with `MPMusicPlayerControllerErrorDomain
+    /// error 9` — a code that is not in the public error enum — and the rejected
+    /// transaction leaves the player's queue *empty*, silently losing everything that was
+    /// lined up. A queue editor that sometimes deletes the queue is worse than no queue
+    /// editor, so edits rebuild instead.
     func refreshQueue() {
-        // The `queueTransaction:` label is required, not stylistic: with a trailing
-        // closure this resolves to NSObject's `perform(_:with:)` instead.
-        player.perform(queueTransaction: { _ in
-            // Deliberately no mutation.
-        }, completionHandler: { [weak self] queue, error in
-            let items = queue.items
-            Task { @MainActor in
-                guard let self, error == nil else {
-                    if let error {
-                        Log.playback.error("refreshQueue failed: \(error.localizedDescription)")
-                    }
-                    return
-                }
-                self.queue = items.compactMap(MusicLibrary.track(from:))
-                if let id = self.currentTrack?.externalID,
-                   let index = self.queue.firstIndex(where: { $0.externalID == id }) {
-                    self.queueIndex = index
-                }
-            }
-        })
+        // Kept as the place a reconciliation would go, but there is deliberately
+        // nothing to reconcile against: reading the player's queue also requires a
+        // transaction, and the local copy is what was handed to `setQueue`.
+        if let id = currentTrack?.externalID,
+           let index = queue.firstIndex(where: { $0.externalID == id }) {
+            queueIndex = index
+        }
     }
 
     /// Moves one track within the queue.
-    ///
-    /// The queue belongs to the media services process, so it cannot simply be replaced
-    /// with a reordered array — doing that with `setQueue` restarts playback from the
-    /// top. A transaction expresses the move as a removal plus an insertion after the
-    /// track it should now follow, which the player applies without interrupting audio.
     func moveQueueItem(from source: IndexSet, to destination: Int) {
         guard let from = source.first, from < queue.count else { return }
-
-        // Applied locally first so the row lands where the finger dropped it, rather
-        // than snapping back until the player's callback arrives.
         var reordered = queue
         reordered.move(fromOffsets: source, toOffset: destination)
-        let moved = queue[from]
-        // `move(fromOffsets:toOffset:)` uses a pre-removal index; the item it should
-        // follow is whatever ends up before it afterwards.
-        let newIndex = reordered.firstIndex(where: { $0.id == moved.id }) ?? 0
-        let predecessor = newIndex > 0 ? reordered[newIndex - 1] : nil
-        queue = reordered
-
-        player.perform(queueTransaction: { mutable in
-            guard let item = mutable.items.first(where: {
-                String($0.persistentID) == moved.externalID
-            }) else { return }
-
-            mutable.remove(item)
-
-            let descriptor = MPMusicPlayerMediaItemQueueDescriptor(
-                itemCollection: MPMediaItemCollection(items: [item]))
-            if let predecessor,
-               let after = mutable.items.first(where: {
-                   String($0.persistentID) == predecessor.externalID
-               }) {
-                mutable.insert(descriptor, after: after)
-            } else {
-                // nil means the head of the queue.
-                mutable.insert(descriptor, after: nil)
-            }
-        }, completionHandler: { [weak self] _, error in
-            if let error {
-                Log.playback.error("queue move failed: \(error.localizedDescription)")
-            }
-            Task { @MainActor in self?.refreshQueue() }
-        })
+        rebuildQueue(reordered)
     }
 
     /// Removes tracks from the queue.
@@ -267,24 +221,48 @@ final class Playback: ObservableObject {
         let removing = offsets.compactMap { $0 < queue.count ? queue[$0] : nil }
         guard !removing.isEmpty else { return }
 
-        // Removing what is playing would stop playback with no obvious cause, so it is
-        // skipped — the row for the current track is not swipeable in the UI either.
-        let ids = Set(removing.compactMap(\.externalID)).subtracting(
-            [currentTrack?.externalID].compactMap { $0 })
+        // Removing what is playing would stop the music with no obvious cause, so it is
+        // skipped here as well as being non-swipeable in the UI.
+        let ids = Set(removing.compactMap(\.externalID))
+            .subtracting([currentTrack?.externalID].compactMap { $0 })
         guard !ids.isEmpty else { return }
 
-        queue.removeAll { $0.externalID.map(ids.contains) ?? false }
+        rebuildQueue(queue.filter { !($0.externalID.map(ids.contains) ?? false) })
+    }
 
-        player.perform(queueTransaction: { mutable in
-            for item in mutable.items where ids.contains(String(item.persistentID)) {
-                mutable.remove(item)
+    /// Replaces the player's queue while keeping the current track playing from where it
+    /// had reached.
+    ///
+    /// `setQueue` always restarts from the top, so the position has to be captured and
+    /// restored by hand. That leaves a short gap in the audio — the price of not using
+    /// the transaction API, and much cheaper than losing the queue.
+    private func rebuildQueue(_ newOrder: [Track]) {
+        let items = MusicLibrary.items(forIDs: newOrder.compactMap(\.externalID))
+        guard !items.isEmpty else { return }
+
+        let anchorID = currentTrack?.externalID
+        let resumeAt = player.currentPlaybackTime
+        let wasPlaying = isPlaying
+
+        queue = newOrder
+        isLoadingQueue = true
+        player.setQueue(with: MPMediaItemCollection(items: items))
+        player.prepareToPlay { [weak self] error in
+            Task { @MainActor in
+                guard let self else { return }
+                self.isLoadingQueue = false
+                if let error {
+                    Log.playback.error("queue rebuild failed: \(error.localizedDescription)")
+                } else {
+                    if let anchorID, let item = MusicLibrary.item(forID: anchorID) {
+                        self.player.nowPlayingItem = item
+                        self.player.currentPlaybackTime = resumeAt
+                    }
+                    if wasPlaying { self.player.play() }
+                }
+                self.syncFromPlayer()
             }
-        }, completionHandler: { [weak self] _, error in
-            if let error {
-                Log.playback.error("queue remove failed: \(error.localizedDescription)")
-            }
-            Task { @MainActor in self?.refreshQueue() }
-        })
+        }
     }
 
     func toggle() {
